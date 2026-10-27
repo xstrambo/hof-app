@@ -1,9 +1,9 @@
 // Offline-Betrieb: die App-Dateien liegen im Handy, damit sie auch ohne Netz startet.
 // Gesendet wird nur aus der App heraus (Warteschlange), nicht hier.
-const VERSION = 'hof-app-v5';
+const VERSION = 'hof-app-v6';
 const DATEIEN = [
   './', 'index.html', 'styles.css', 'app.js', 'config.js', 'manifest.webmanifest',
-  'js/paket.js', 'js/speicher.js', 'js/briefkasten.js', 'js/sprache.js', 'js/modus.js', 'js/funktionen.js', 'js/post.js', 'js/post-ansicht.js', 'funktionen.json',
+  'js/paket.js', 'js/speicher.js', 'js/briefkasten.js', 'js/sprache.js', 'js/erkennung.js', 'js/wav.js', 'js/modus.js', 'js/funktionen.js', 'js/post.js', 'js/post-ansicht.js', 'funktionen.json',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 

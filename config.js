@@ -4,9 +4,10 @@ export default {
   attrappe: false,
   funktionUrl: 'https://mrcqaspirpwxomldzxeo.supabase.co/functions/v1/briefkasten',
   testFunktionUrl: 'https://mrcqaspirpwxomldzxeo.supabase.co/functions/v1/briefkasten-test', // Test-Fassung des Briefkastens: nur im Test-Modus benutzt (Rückfragen & Co.); leer = alles über funktionUrl
+  transkribierenUrl: 'https://mrcqaspirpwxomldzxeo.supabase.co/functions/v1/transkribieren', // Cloud-Spracherkennung (Mistral, EU); nur benutzt, wenn „sprache_cloud“ in funktionen.json gilt. Leer = aus der Adresse des Briefkastens abgeleitet
   oeffentlicherSchluessel: '', // bleibt leer: der Briefkasten braucht keinen Supabase-Schlüssel
   laptopSchluessel: 'BC1WYrCKD1WFmMcHl8QW8AZeiZRtua3NB9VggdOzfEBAAvWLP/htP8O1zyIHjzrluAh0b0HXdJmSBQt8KUtwGPk=',        // öffentlicher Schlüssel des Laptops (Base64, 65 Byte P-256), aus oeffentlich.txt
   testSchluessel: 'BLj1IDi2eyIvNokMVcSCnMwaVYfDUqaRQFfWpVhSmJ186Os9Ojosx4257uAwQQqTI0vxSvVNBDi1J9w/WrjdwA8=',          // öffentlicher Schlüssel der TEST-Instanz (Base64, 65 Byte P-256), aus oeffentlich_test.txt. Leer = Test noch nicht eingerichtet: dorthin wird nichts gesendet
   testRollen: ['admin'],       // wer zwischen Echt und Test wählen darf (der Briefkasten erlaubt Test ohnehin nur Verwaltern)
-  live_text: 'handy',          // 'handy' = Spracherkennung des Handys; 'mistral' = Ausweichlösung, noch nicht eingerichtet
+  live_text: 'handy',          // Live-Text über die Spracherkennung des Handys. Die Cloud-Erkennung (Mistral) steuert nicht diese Einstellung, sondern die Funktion „sprache_cloud“ in funktionen.json
 };

@@ -135,6 +135,11 @@
   <div class="text-block">
     <label for="hof-text" class="ueberschrift">Dein Text</label>
     <textarea id="hof-text" placeholder="Hier steht, was du gesagt hast."></textarea>
+    <div class="erkennung" id="erkennung" role="status" aria-live="polite" data-funktion="sprache_cloud" hidden>
+      <span id="erkennung-text"></span>
+      <small id="erkennung-grund" hidden></small>
+      <button type="button" class="link-knopf" id="b-erkennung-nochmal" hidden>Nochmal versuchen</button>
+    </div>
   </div>
   <div class="karte audio-zeile" id="audio-zeile" hidden>
     <button type="button" class="play" id="b-play" aria-label="Aufnahme anhören"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>

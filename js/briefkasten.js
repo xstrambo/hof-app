@@ -3,16 +3,20 @@
 // Für Tests gibt es eine Attrappe, die alles im Browser behält.
 
 export class BriefkastenFehler extends Error {
-  constructor(code, text) { super(text || code); this.code = code; }
+  constructor(code, text, grund) { super(text || code); this.code = code; if (grund) this.grund = grund; }
 }
 
 export function briefkastenFuer(config) {
   if (config.attrappe) return new Attrappe();
-  return new Echt(config.funktionUrl, config.oeffentlicherSchluessel, config.testFunktionUrl);
+  return new Echt(config.funktionUrl, config.oeffentlicherSchluessel, config.testFunktionUrl, config.transkribierenUrl);
 }
 
 class Echt {
-  constructor(url, anonSchluessel, testUrl = '') { this.url = url; this.anon = anonSchluessel; this.testUrl = typeof testUrl === 'string' ? testUrl.trim() : ''; }
+  constructor(url, anonSchluessel, testUrl = '', sprachUrl = '') {
+    this.url = url; this.anon = anonSchluessel; this.testUrl = typeof testUrl === 'string' ? testUrl.trim() : '';
+    // Die Spracherkennung ist eine eigene Funktion auf demselben Server (…/transkribieren); ohne Eintrag in config.js wird die Adresse aus der des Briefkastens abgeleitet.
+    this.sprachUrl = typeof sprachUrl === 'string' && sprachUrl.trim() ? sprachUrl.trim() : String(url || '').replace(/[^/]*$/, 'transkribieren');
+  }
 
   kopf(aktion, token) {
     const kopf = { 'x-hof-aktion': aktion };
@@ -56,6 +60,23 @@ class Echt {
   antwortHolen(token, id, test = false) { return this.rufeRoh('antwort_holen', { id }, token, this.ziel(test)); }
   antwortQuittieren(token, id, test = false) { return this.rufe('antwort_quittieren', { id }, token, undefined, this.ziel(test)); }
   schluesselSetzen(token, schluessel, test = false) { return this.rufe('schluessel_setzen', { schluessel }, token, undefined, this.ziel(test)); }
+
+  // Spracherkennung in der Cloud: die Aufnahme (Blob) geht an die Funktion „transkribieren“, zurück kommt { ok, text }. Nach `ms` Millisekunden gibt die App auf (Fehler „zeit“).
+  async transkribieren(token, audio, daten = {}, ms = 20000) {
+    const kopf = { ...this.kopf('transkribieren', token), 'content-type': 'application/octet-stream', 'x-hof-daten': encodeURIComponent(JSON.stringify(daten)) };
+    const abbruch = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = abbruch ? setTimeout(() => abbruch.abort(), ms) : 0;
+    try {
+      let r;
+      try { r = await fetch(this.sprachUrl, { method: 'POST', headers: kopf, body: audio, ...(abbruch ? { signal: abbruch.signal } : {}) }); }
+      catch (e) { throw new BriefkastenFehler(e && e.name === 'AbortError' ? 'zeit' : 'netz', e && e.name === 'AbortError' ? 'Zeitüberschreitung' : 'Kein Netz'); }
+      let j;
+      try { j = await r.json(); }
+      catch { if (abbruch && abbruch.signal.aborted) throw new BriefkastenFehler('zeit', 'Zeitüberschreitung'); j = {}; }
+      if (!r.ok) throw new BriefkastenFehler(j.fehler || 'server', j.text, j.grund);
+      return j;
+    } finally { clearTimeout(timer); }
+  }
 
   anmelden(code, name, schluessel) { return this.rufe('anmelden', { code, name, schluessel }); }
   status(token) { return this.rufe('status', {}, token); }
@@ -154,6 +175,8 @@ class Attrappe {
     return { ok: true };
   }
   async sperren(token, geraet) { return this.freigeben(token, geraet, false); }
+  // Die Cloud-Spracherkennung gibt es in der Attrappe nicht (die App nimmt dort nie den Weg über die Cloud).
+  async transkribieren() { throw new BriefkastenFehler('nicht_eingerichtet', 'Spracherkennung noch nicht eingerichtet'); }
 
   // Rückfragen vom Laptop: in der Attrappe liegen sie in z.antworten ({id, instanz, umschlag als Base64}); zum Ausprobieren im Browser.
   async antwortenListe(token) {

@@ -22,8 +22,10 @@ export class Aufnahme {
   // beiPegel(0..1)             Ausschlag der Anzeige (echter Pegel bei Aufnahme, sonst "hört zu" aus den Ereignissen)
   // beiWechsel(grund)          Live-Text geht nicht, es wird stattdessen aufgenommen (grund: netz | fehlt | aus | stumm | ...)
   // beiProblem(art)            'mikrofon' (nicht erlaubt) oder 'aufnahme' (geht nicht): es läuft gar nichts mehr
-  constructor({ beiText, beiPegel, beiProblem, beiWechsel, liveText = true }) {
-    this.liveTextGewuenscht = liveText;
+  // liveText = false           gleich aufnehmen, ohne die Spracherkennung des Handys zu starten (z. B. weil der Text hinterher aus der Cloud kommt);
+  //                            beiWechsel bekommt dann `aufnahmeGrund` ('aus' = der Live-Text ist abgeschaltet, 'cloud' = der Text kommt nach dem Stopp)
+  constructor({ beiText, beiPegel, beiProblem, beiWechsel, liveText = true, aufnahmeGrund = 'aus' }) {
+    this.liveTextGewuenscht = liveText; this.aufnahmeGrund = aufnahmeGrund;
     this.beiText = beiText; this.beiPegel = beiPegel || (() => {});
     this.beiProblem = beiProblem || (() => {}); this.beiWechsel = beiWechsel || (() => {});
     this.fest = ''; this.satzFest = ''; this.vorlaeufig = '';
@@ -47,7 +49,7 @@ export class Aufnahme {
     }
     // Live-Text geht von vornherein nicht (oder kein Netz): gleich aufnehmen
     this.modus = 'aufnahme';
-    this.beiWechsel(!this.liveTextGewuenscht ? 'aus' : !Erkenner ? 'fehlt' : 'netz');
+    this.beiWechsel(!this.liveTextGewuenscht ? this.aufnahmeGrund : !Erkenner ? 'fehlt' : 'netz');
     try { await this.aufnahmeStarten(); }
     catch (e) { this.laeuft = false; this.aufraeumen(); throw e; }
   }

@@ -7,6 +7,7 @@ import { ECHT, TEST, lesModus, schreibModus, wirksamerModus, testErlaubt, schlue
 import { ladeFunktionen, sichtbar as funktionSichtbar, anwenden as funktionenAnwenden } from './js/funktionen.js';
 import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon } from './js/post.js';
 import { zeichnePost, sichtbareFragen } from './js/post-ansicht.js';
+import { FUNKTION as CLOUD, MAX_SEKUNDEN, erkennen, hinweisFuer, wiederholbar, pauseMs, textVerbinden, HINWEIS_LEER, HINWEIS_LAEUFT, HINWEIS_FERTIG } from './js/erkennung.js';
 
 // ---------- Einstellungen ----------
 const config = { live_text: 'handy', testSchluessel: '', testRollen: ['admin'], ...grundConfig };
@@ -26,6 +27,9 @@ let modus = ECHT;           // Echt | Test: wohin die nächste Nachricht geht (s
 let funktionen = {};        // neue Funktionen: { name: 'test' | 'alle' } aus funktionen.json (siehe js/funktionen.js); leer = alles Neue nur im Test
 let entwurf = neuerEntwurf();
 let aufnahme = null;
+let cloudPauseBis = 0;      // nach einem Ausfall der Cloud-Erkennung nimmt die App bis dahin wieder den Live-Text des Handys
+let erkennungOffen = 0;     // so viele Aufnahmen werden gerade abgeschrieben
+let letzteErkennung = null; // { audio, dauer } für „Nochmal versuchen“
 const HINWEIS_KEIN_LIVETEXT = 'Live-Text auf diesem Handy nicht verfügbar – die Aufnahme wird später abgeschrieben.';
 // Ruhiger Hinweis auf dem Aufnahme-Bildschirm, wenn statt Live-Text aufgenommen wird (je nach Grund)
 const HINWEIS_WECHSEL = {
@@ -35,6 +39,8 @@ const HINWEIS_WECHSEL = {
   standard: 'Live-Text klappt hier nicht – ich nehme stattdessen auf. Der Laptop schreibt es\u00A0ab.',
 };
 HINWEIS_WECHSEL.aus = HINWEIS_WECHSEL.fehlt;
+// Cloud-Erkennung (Mistral): während der Aufnahme kein Live-Text, der Text kommt gleich nach „Fertig“
+HINWEIS_WECHSEL.cloud = 'Ich nehme auf. Nach „Fertig“ steht der Text in ein paar Sekunden da – prüfen, verbessern, senden. Bis zu 3\u00A0Minuten am Stück.';
 let aktuell = null;
 
 function neuerEntwurf() { return { text: '', audio: null, audioDauer: 0, anhaenge: [] }; }
@@ -57,6 +63,7 @@ function zeige(id, { verlauf = true } = {}) {
   if (verlauf) history.pushState({ s: id }, '');
   window.scrollTo(0, 0);
   if (id === 's-start' || id === 's-gesendet') zeichneListen();
+  if (id === 's-start') startHinweis();                       // der Hinweis hängt davon ab, ob die Cloud-Erkennung gerade pausiert
   if (id === 's-freigaben') ladeFreigaben();
   if (id === 's-post') { postZeichnen(true); postHolen(); }
 }
@@ -189,8 +196,12 @@ async function sprechenStarten(nochmal) {
   zeige('s-aufnahme');
   // Zuerst läuft nur die Spracherkennung (Live-Text). Geht die nicht, schaltet Aufnahme von selbst auf reine
   // Tonaufnahme um und meldet das über beiWechsel. So greifen nie beide gleichzeitig aufs Mikrofon zu.
+  // Cloud-Erkennung (nur wenn freigegeben, siehe funktionen.json „sprache_cloud“): dann gar kein Live-Text, sondern gleich aufnehmen –
+  // der Text kommt nach „Fertig“ aus der Cloud (js/erkennung.js).
+  const cloud = cloudAktiv();
   const a = new Aufnahme({
-    liveText: config.live_text === 'handy',
+    liveText: !cloud && config.live_text === 'handy',
+    aufnahmeGrund: cloud ? 'cloud' : 'aus',
     beiText: (fest, vor) => {
       $('#live-fest').textContent = [vorher, fest].filter(Boolean).join(' ') + (vor ? ' ' : '');
       $('#live-vorlaeufig').textContent = vor;
@@ -200,6 +211,7 @@ async function sprechenStarten(nochmal) {
     beiWechsel: grund => { if (aufnahme === a) aufnahmeModus(grund); },
     beiProblem: art => { if (aufnahme === a) aufnahmeGescheitert(art); },
   });
+  a.cloud = cloud;
   aufnahme = a;
   try { await a.starten(); }
   catch (err) {
@@ -208,6 +220,8 @@ async function sprechenStarten(nochmal) {
     history.back();
     return;
   }
+  // Mehr als 3 Minuten nimmt die Cloud-Erkennung nicht an: die App beendet die Aufnahme dann selbst (der Rest geht mit „Nochmal sprechen“).
+  if (cloud) setTimeout(() => { if (aufnahme === a) { meldung('Nach 3 Minuten beendet – für mehr bitte „Nochmal sprechen“.', 6000); aufnahmeBeenden(); } }, MAX_SEKUNDEN * 1000);
   const t0 = Date.now();
   $('#uhr').textContent = '0:00';
   clearInterval(uhrTimer);
@@ -229,7 +243,7 @@ function aufnahmeModus(grund) {
   if (c) c.hidden = !!grund; // beim reinen Aufnehmen schreibt niemand mit: kein blinkender Cursor
   const hinweis = grund ? (HINWEIS_WECHSEL[grund] || HINWEIS_WECHSEL.standard) : '';
   // Bei unerwartetem Ausfall steht der technische Code klein darunter (hilft, wenn es auf einem Handy nicht klappt)
-  const code = grund && !['aus', 'fehlt', 'netz'].includes(grund) ? grund : '';
+  const code = grund && !['aus', 'fehlt', 'netz', 'cloud'].includes(grund) ? grund : '';
   if (h) {
     h.textContent = hinweis;
     if (code) { const k = document.createElement('small'); k.textContent = 'Code: ' + code; h.appendChild(k); }
@@ -265,8 +279,55 @@ async function aufnahmeBeenden() {
   } else if (!r.text && r.dauer >= 2) {
     meldung('Es wurde nichts erkannt. Bitte nochmal sprechen oder tippen.', 4500);
   }
+  erkennungAnzeigen(null);
   zeigePruefen(true);
+  if (a.cloud && r.audio) erkennungStarten(r.audio, r.audioDauer || r.dauer);   // der Text kommt gleich; das Textfeld bleibt solange bedienbar
 }
+
+// ---------- Cloud-Erkennung: Text zur Aufnahme ----------
+const cloudAktiv = () => funktionAktiv(CLOUD) && !config.attrappe && !!geraet && geraet.status === 'frei' && !!window.MediaRecorder
+  && !!navigator.mediaDevices && !!navigator.mediaDevices.getUserMedia && Date.now() >= cloudPauseBis;
+
+async function erkennungStarten(audio, dauer) {
+  letzteErkennung = { audio, dauer };
+  const mein = entwurf;
+  erkennungOffen++;
+  erkennungAnzeigen({ art: 'laeuft' });
+  let r;
+  try { r = await erkennen({ kasten, token: geraet.token, audio, dauer }); }
+  catch { r = { ok: false, code: 'dienst', grund: '' }; }
+  erkennungOffen = Math.max(0, erkennungOffen - 1);
+  if (r.ok) cloudPauseBis = 0;                                               // die Cloud antwortet wieder: keine Pause mehr nötig
+  if (entwurf !== mein) { erkennungAnzeigen(null); return; }                // unterdessen gesendet oder neu begonnen: nichts mehr eintragen
+  if (r.ok && r.text) {
+    entwurf.text = textVerbinden(entwurf.text, r.text);                      // zum Vorhandenen dazu – was inzwischen getippt wurde, bleibt
+    entwurfMerken(true);
+    if (aktuell === 's-pruefen') $('#hof-text').value = entwurf.text;
+    erkennungAnzeigen({ art: 'fertig' });
+  } else if (r.ok) {
+    erkennungAnzeigen({ art: 'leer' });
+  } else {
+    const pause = pauseMs(r.code);
+    if (pause) cloudPauseBis = Date.now() + pause;                           // eine Weile wieder Live-Text, dann nochmal die Cloud versuchen
+    erkennungAnzeigen({ art: 'fehler', code: r.code, grund: r.grund });
+  }
+}
+
+// Zeigt unter dem Textfeld, was mit der Erkennung ist. null = nichts anzeigen. Solange eine Erkennung läuft, kann nicht gesendet werden
+// (sonst ginge der Text verloren, der gleich kommt) – die Wartezeit ist begrenzt: jede Anfrage gibt nach 20 Sekunden auf, und es gibt höchstens zwei (zweite mit WAV, js/erkennung.js).
+function erkennungAnzeigen(z) {
+  const box = $('#erkennung'), text = $('#erkennung-text'), nochmal = $('#b-erkennung-nochmal'), grund = $('#erkennung-grund');
+  $('#b-senden').disabled = erkennungOffen > 0;
+  platzhalterSetzen();
+  if (!box) return;
+  if (!z) { box.hidden = true; box.removeAttribute('data-art'); return; }
+  box.hidden = false; box.dataset.art = z.art;
+  text.textContent = z.art === 'laeuft' ? HINWEIS_LAEUFT : z.art === 'fertig' ? HINWEIS_FERTIG : z.art === 'leer' ? HINWEIS_LEER : hinweisFuer(z.code);
+  nochmal.hidden = !(z.art === 'fehler' && wiederholbar(z.code) && letzteErkennung);
+  grund.textContent = z.art === 'fehler' && z.grund ? 'Code: ' + z.grund : '';
+  grund.hidden = !grund.textContent;
+}
+$('#b-erkennung-nochmal').addEventListener('click', () => { if (letzteErkennung && !erkennungOffen) erkennungStarten(letzteErkennung.audio, letzteErkennung.dauer); });
 $('#b-fertig').addEventListener('click', aufnahmeBeenden);
 $('#b-abbrechen').addEventListener('click', () => { if (aufnahme) { aufnahme.abbrechen(); aufnahme = null; } history.back(); });
 
@@ -277,13 +338,17 @@ function zeigePruefen(ersetzen) {
   const az = $('#audio-zeile');
   az.hidden = !entwurf.audio;
   $('#audio-label').textContent = 'Sprachaufnahme · ' + dauerText(entwurf.audioDauer) + ' · geht mit';
-  // Nur Aufnahme, kein Text (Live-Text ging nicht): sagen, dass der Laptop abschreibt
-  $('#hof-text').placeholder = entwurf.audio && !entwurf.text.trim()
-    ? 'Kein Text – der Laptop schreibt die Aufnahme ab. Du kannst auch selbst etwas tippen.'
-    : 'Hier steht, was du gesagt hast.';
+  platzhalterSetzen();
   zeichneAnhaenge();
   if (ersetzen) { history.replaceState({ s: 's-pruefen' }, ''); zeige('s-pruefen', { verlauf: false }); }
   else zeige('s-pruefen');
+}
+// Was im leeren Textfeld steht: läuft gerade eine Erkennung, kommt der Text gleich; nur Aufnahme und kein Text (Live-Text ging nicht,
+// Cloud-Erkennung ging nicht): der Laptop schreibt ab; sonst der gewohnte Satz.
+function platzhalterSetzen() {
+  $('#hof-text').placeholder = erkennungOffen > 0 ? 'Der Text kommt gleich – du kannst auch schon tippen.'
+    : entwurf.audio && !entwurf.text.trim() ? 'Kein Text – der Laptop schreibt die Aufnahme ab. Du kannst auch selbst etwas tippen.'
+    : 'Hier steht, was du gesagt hast.';
 }
 $('#hof-text').addEventListener('input', e => { entwurf.text = e.target.value; entwurfMerken(); });
 $('#b-zurueck-pruefen').addEventListener('click', () => history.back());
@@ -294,7 +359,7 @@ $('#b-play').addEventListener('click', () => {
   if (spieler && !spieler.paused) { spieler.pause(); return; }
   spieler = new Audio(URL.createObjectURL(entwurf.audio)); spieler.play().catch(() => {});
 });
-$('#b-audio-weg').addEventListener('click', () => { entwurf.audio = null; entwurf.audioDauer = 0; $('#audio-zeile').hidden = true; entwurfMerken(); });
+$('#b-audio-weg').addEventListener('click', () => { entwurf.audio = null; entwurf.audioDauer = 0; $('#audio-zeile').hidden = true; letzteErkennung = null; erkennungAnzeigen(null); entwurfMerken(); });
 
 function zeichneAnhaenge() {
   const box = $('#anhaenge');
@@ -349,6 +414,7 @@ $('#f-schnell').addEventListener('submit', e => {
 
 // ---------- Senden ----------
 $('#b-senden').addEventListener('click', async () => {
+  if (erkennungOffen > 0) { meldung('Einen Moment – der Text wird noch erkannt.'); return; }
   entwurf.text = $('#hof-text').value.trim();
   if (!entwurf.text && !entwurf.audio && !entwurf.anhaenge.length) { meldung('Es gibt noch nichts zu senden.'); return; }
   const ziel = modus;                                   // das Ziel gilt ab hier für diese Nachricht – auch wenn später umgeschaltet wird
@@ -375,6 +441,7 @@ $('#b-senden').addEventListener('click', async () => {
       umschlag: new Blob([umschlag], { type: 'application/octet-stream' }),
     });
     entwurf = neuerEntwurf();
+    letzteErkennung = null; erkennungAnzeigen(null);
     clearTimeout(entwurfTimer);
     await einstellung.loesche('entwurf');
     $('#erfolg-titel').textContent = 'Wird gesendet …';
@@ -566,6 +633,7 @@ function modusAnzeigen() {
   $('#senden-text').textContent = test ? TEXTE.sendenTest : TEXTE.senden;
   document.title = test ? 'Hof-App (TEST)' : 'Hof-App';
   funktionenAnzeigen();
+  startHinweis();
   postAnzeigen();
 }
 $('#m-echt').addEventListener('click', () => { modusSetzen(ECHT); postHolen(); });
@@ -585,7 +653,7 @@ let funktionenGeladen = 0;
 async function funktionenLaden() {
   funktionenGeladen = Date.now();
   const neu = await ladeFunktionen();
-  if (neu) { funktionen = neu; funktionenAnzeigen(); postAnzeigen(); postHolen(); }
+  if (neu) { funktionen = neu; funktionenAnzeigen(); startHinweis(); postAnzeigen(); postHolen(); }
 }
 // Wer die App lange offen hat, bekommt eine neue Freigabe spätestens nach 10 Minuten (beim Zurückkehren in die App).
 document.addEventListener('visibilitychange', () => {
@@ -702,13 +770,17 @@ function zeitText(ms) {
 function endung(typ) { return typ.includes('mp4') ? 'm4a' : typ.includes('ogg') ? 'ogg' : 'webm'; }
 
 function startHinweis() {
-  if (config.live_text !== 'handy' || !liveTextMoeglich) $('#start-hinweis').textContent = HINWEIS_KEIN_LIVETEXT;
+  const h = $('#start-hinweis');
+  if (cloudAktiv()) h.textContent = 'Nach dem Sprechen steht der Text gleich da.';
+  else if (config.live_text !== 'handy' || !liveTextMoeglich) h.textContent = HINWEIS_KEIN_LIVETEXT;
+  else h.textContent = 'Der Text erscheint, während du sprichst.';
 }
 
 // Für Tests
 window.hofApp = {
   postausgang, quittungenHolen, nachrichten, modus: () => modus, funktion: funktionAktiv, funktionenLaden, funktionen: () => ({ ...funktionen }),
   post: { holen: postHolen, stand: () => JSON.parse(JSON.stringify(postStand)), zeichnen: postZeichnen },
+  sprache: { cloudAktiv, pauseBis: () => cloudPauseBis, offen: () => erkennungOffen },
 };
 
 starten();
