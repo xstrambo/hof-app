@@ -525,35 +525,63 @@ function hintergrund() {
 }
 
 // ---------- Listen ----------
+// Der Verlauf zeigt nur die Nachrichten des Modus, in dem man gerade ist: Echt nur Echt-Nachrichten, Test nur Test-Nachrichten – auch das, was
+// noch auf Netz wartet. Was zum anderen Modus gehört, ist nicht weg: eine kleine Zeile sagt, wie viele es sind und wo sie stehen.
+// Jeder Eintrag hat eine Zeile (zu langer Text endet mit „…“), es sind höchstens 3 – so schiebt der Verlauf das Mikrofon nie aus dem Bild.
+const VERLAUF_MAX = 3;
+let listenLauf = 0;
 async function zeichneListen() {
+  const mein = ++listenLauf;
   const alle = (await nachrichten.alle()).filter(n => n.art !== 'antwort');     // Antworten auf Rückfragen stehen in der Post, nicht hier
-  fuelle($('#liste-start'), alle.slice(0, 3));
+  if (mein !== listenLauf) return;                                               // unterdessen wurde neu gezeichnet (z. B. den Schalter umgelegt)
   const heute = new Date(); heute.setHours(0, 0, 0, 0);
-  fuelle($('#liste-gesendet'), alle.filter(n => n.erstellt >= heute.getTime() || n.status === 'wartet').slice(0, 6));
+  const jetzt = modus;                                                           // erst nach dem Warten lesen: der Schalter kann unterdessen umgelegt worden sein
+  verlaufZeigen($('#liste-start'), $('#hinweis-start'), alle, jetzt);
+  verlaufZeigen($('#liste-gesendet'), $('#hinweis-gesendet'), alle.filter(n => n.erstellt >= heute.getTime() || n.status === 'wartet'), jetzt);
 }
+
+function verlaufZeigen(box, hinweis, liste, jetzt) {
+  fuelle(box, liste.filter(n => zielVon(n) === jetzt).slice(0, VERLAUF_MAX));
+  const andere = liste.filter(n => zielVon(n) !== jetzt).length;
+  const text = andere && testErlaubt(config, geraet) ? andereText(andere, jetzt) : '';   // wer nicht umschalten darf, hat dort auch nichts
+  hinweis.textContent = text; hinweis.hidden = !text;
+  hinweis.parentElement.classList.toggle('mit-hinweis', !!text);          // styles.css: mit der Zeile braucht der Verlauf etwas mehr Platz
+}
+const andereText = (n, jetzt) => jetzt === TEST
+  ? (n === 1 ? '1 echte Nachricht' : n + ' echte Nachrichten') + ' – unter Echt'
+  : (n === 1 ? '1 Test-Nachricht' : n + ' Test-Nachrichten') + ' – unter Test';
 
 function fuelle(box, liste) {
   box.replaceChildren();
   if (!liste.length) { const l = document.createElement('div'); l.className = 'leer'; l.textContent = 'Noch nichts gesendet.'; box.appendChild(l); return; }
   for (const n of liste) {
-    const e = document.createElement('div'); e.className = 'eintrag'; e.dataset.id = n.id; e.dataset.status = n.status;
+    const ziel = zielVon(n);
+    const e = document.createElement('div'); e.className = 'eintrag' + (ziel === TEST ? ' test' : ''); e.dataset.id = n.id; e.dataset.status = n.status; e.dataset.ziel = ziel;
     const t = document.createElement('span'); t.className = 'eintrag-text'; t.textContent = n.vorschau; e.appendChild(t);
-    const fuss = document.createElement('div'); fuss.className = 'eintrag-fuss';
-    if (zielVon(n) === TEST) { const c = chip('Test'); c.classList.add('test'); fuss.appendChild(c); }
-    if (n.sprache) fuss.appendChild(chip('Sprache ' + dauerText(n.sprache)));
-    if (n.fotos) fuss.appendChild(chip(n.fotos === 1 ? '1 Foto' : n.fotos + ' Fotos'));
-    if (n.doks) fuss.appendChild(chip(n.doks === 1 ? '1 Dokument' : n.doks + ' Dokumente'));
+    // Was mitging, als kleine Zeichen (der Eintrag hat nur eine Zeile)
+    if (n.sprache) e.appendChild(mini('sprache', '', 'Sprachnachricht ' + dauerText(n.sprache)));
+    if (n.fotos) e.appendChild(mini('foto', n.fotos > 1 ? String(n.fotos) : '', n.fotos === 1 ? '1 Foto' : n.fotos + ' Fotos'));
+    if (n.doks) e.appendChild(mini('dok', n.doks > 1 ? String(n.doks) : '', n.doks === 1 ? '1 Dokument' : n.doks + ' Dokumente'));
     const z = document.createElement('span'); z.className = 'zeit';
     const st = document.createElement('span'); st.className = 'st st-' + n.status; st.setAttribute('role', 'img');
     st.setAttribute('aria-label', { wartet: 'Wartet auf Netz', gesendet: 'Gesendet', abgeholt: 'Im BetriebsBrain angekommen' }[n.status]);
     if (n.status === 'wartet') { z.classList.add('wartet'); z.append('wartet auf Netz', st); }
     else z.append(zeitText(n.erstellt), st);
-    fuss.appendChild(z);
-    e.appendChild(fuss);
+    e.appendChild(z);
     box.appendChild(e);
   }
 }
-function chip(t) { const c = document.createElement('span'); c.className = 'chip'; c.textContent = t; return c; }
+const MINI_ZEICHEN = {
+  sprache: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/>',
+  foto: '<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>',
+  dok: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+};
+function mini(art, zahl, beschreibung) {
+  const m = document.createElement('span'); m.className = 'mini'; m.setAttribute('role', 'img'); m.setAttribute('aria-label', beschreibung); m.title = beschreibung;
+  m.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + MINI_ZEICHEN[art] + '</svg>';        // nur feste Zeichen, nie Text von außen
+  if (zahl) m.append(zahl);
+  return m;
+}
 
 // ---------- Freigaben (nur Niklas) ----------
 $('#b-freigaben').addEventListener('click', () => zeige('s-freigaben'));
@@ -632,10 +660,18 @@ function modusAnzeigen() {
   $('#b-senden').classList.toggle('test', test);
   $('#senden-text').textContent = test ? TEXTE.sendenTest : TEXTE.senden;
   document.title = test ? 'Hof-App (TEST)' : 'Hof-App';
+  bandHoehe();
   funktionenAnzeigen();
   startHinweis();
   postAnzeigen();
+  zeichneListen();                                            // der Verlauf zeigt nur Nachrichten des gewählten Modus
 }
+// Wie hoch das orange Band gerade ist (sein Text bricht auf schmalen Handys um): so viel weniger Platz hat der Bildschirm darunter (styles.css: --band).
+function bandHoehe() {
+  const b = $('#test-banner');
+  document.documentElement.style.setProperty('--band', (b && !b.hidden ? Math.ceil(b.getBoundingClientRect().height) : 0) + 'px');
+}
+addEventListener('resize', bandHoehe);
 $('#m-echt').addEventListener('click', () => { modusSetzen(ECHT); postHolen(); });
 $('#m-test').addEventListener('click', () => {
   modusSetzen(TEST);
@@ -778,7 +814,7 @@ function startHinweis() {
 
 // Für Tests
 window.hofApp = {
-  postausgang, quittungenHolen, nachrichten, modus: () => modus, funktion: funktionAktiv, funktionenLaden, funktionen: () => ({ ...funktionen }),
+  postausgang, quittungenHolen, nachrichten, zeichneListen, modus: () => modus, funktion: funktionAktiv, funktionenLaden, funktionen: () => ({ ...funktionen }),
   post: { holen: postHolen, stand: () => JSON.parse(JSON.stringify(postStand)), zeichnen: postZeichnen },
   sprache: { cloudAktiv, pauseBis: () => cloudPauseBis, offen: () => erkennungOffen },
 };

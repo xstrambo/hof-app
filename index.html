@@ -77,9 +77,11 @@
     <span class="post-text"><b>Post</b><span class="klein leise" id="post-untertitel">Keine offenen Fragen</span></span>
     <span class="post-zaehler" id="post-zaehler" hidden>0</span>
   </button>
+  <!-- Verlauf: nur Nachrichten des gewählten Modus (Echt | Test), eine Zeile je Eintrag, höchstens 3 – füllt nur den Platz über dem Mikrofon -->
   <div class="liste-bereich">
     <span class="ueberschrift">Zuletzt gesendet</span>
-    <div class="liste" id="liste-start"></div>
+    <p class="verlauf-hinweis" id="hinweis-start" hidden></p>
+    <div class="liste verlauf" id="liste-start"></div>
   </div>
   <div class="mitte">
     <div class="mic-ring">
@@ -171,7 +173,8 @@
   </div>
   <div class="liste-bereich">
     <span class="ueberschrift">Heute</span>
-    <div class="liste" id="liste-gesendet"></div>
+    <p class="verlauf-hinweis" id="hinweis-gesendet" hidden></p>
+    <div class="liste verlauf" id="liste-gesendet"></div>
   </div>
   <div class="legende">
     <div><span class="st st-wartet"></span><span><b>Wartet auf Netz</b> – bleibt im Handy, geht später raus</span></div>

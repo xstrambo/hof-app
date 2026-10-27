@@ -70,13 +70,54 @@ button{cursor:pointer}
 .mitte{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:20px 0}
 .mitte-text{display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center;padding:0 24px}
 .mitte-text b{font-size:25px}
-.mic-ring{width:212px;height:212px;border-radius:50%;background:var(--gruen-ring);display:flex;align-items:center;justify-content:center}
-.mic-knopf{width:176px;height:176px;border-radius:50%;border:0;background:var(--gruen);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 12px 28px rgba(31,111,63,.35)}
-.mic-knopf svg{width:76px;height:76px;stroke-width:1.8}
+.mic-ring{position:relative;flex:0 1 212px;height:212px;min-height:104px;max-height:212px;aspect-ratio:1;align-self:center;border-radius:50%;background:var(--gruen-ring)}   /* 212 Pixel, wenn Platz ist; sonst schrumpft nur das Mikrofon, nie die Eingabeleiste */
+.mic-knopf{position:absolute;inset:8.5%;border-radius:50%;border:0;background:var(--gruen);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 12px 28px rgba(31,111,63,.35)}
+.mic-knopf svg{width:43%;height:auto;stroke-width:1.8}
 .mic-knopf:active{transform:scale(.97)}
 
 .leiste{display:flex;align-items:center;gap:8px;padding:12px 12px calc(22px + env(safe-area-inset-bottom));background:var(--flaeche);border-top:1px solid var(--linie);position:sticky;bottom:0;margin-bottom:calc(-1 * env(safe-area-inset-bottom))}
 .leiste input{flex:1;min-width:0;height:52px;border-radius:26px;border:1px solid var(--rahmen);background:var(--grund);padding:0 18px;font-size:18px}
+
+/* Startbildschirm: Das Mikrofon sitzt immer am selben Platz – ganz unten, direkt über der Eingabeleiste –, egal wie viele oder wie lange die Nachrichten im Verlauf sind.
+   Der Verlauf füllt nur den Platz darüber. Reicht der nicht, erscheinen weniger Einträge (was nicht ganz hineinpasst, wird weggelassen, nicht angeschnitten);
+   nie wandert das Mikrofon. Ist der Bildschirm kurz, entfällt zuerst die Zeile zum anderen Modus, dann der ganze Verlauf, erst dann schrumpft das Mikrofon. */
+#s-start{height:100dvh;min-height:0}                              /* feste Höhe: nur so kann etwas schrumpfen, statt dass der Bildschirm länger wird */
+.ist-test #s-start{height:calc(100dvh - var(--band,56px))}
+#s-start .liste-bereich{flex:1 1 0;min-height:0;overflow:hidden;container-type:size;padding-bottom:6px}
+#s-start .verlauf{flex:1 1 0;min-height:0;overflow:hidden;flex-flow:column wrap;align-content:flex-start;gap:8px 32px}   /* was nicht in die Spalte passt, rutscht in eine zweite, die außerhalb liegt */
+#s-start .verlauf>*{width:100%;flex:none}
+@container (max-height:71px){#s-start .liste-bereich>*{display:none}}                                  /* kein Platz für Überschrift und einen Eintrag: nichts anzeigen statt Reste */
+@container (max-height:97px){#s-start .liste-bereich.mit-hinweis>.verlauf-hinweis{display:none}}        /* mit der Zeile zum anderen Modus braucht es 26 Pixel mehr: reicht der Platz nicht, entfällt zuerst nur sie */
+#s-start .mitte{display:contents}                                 /* Mikrofon und Text sind selbst Teile der Spalte: so schrumpft nur das Mikrofon, wenn der Platz knapp wird */
+#s-start .mic-ring{margin:8px 0 10px}
+#s-start .mitte-text{flex:none;padding-bottom:14px}
+#s-start .mitte-text span{min-height:2.8em}                       /* Platz für zwei Zeilen, damit der Hinweis das Mikrofon nicht verschiebt */
+@media (max-height:800px){                                        /* kürzere Handys: Kopf, Schalter und Post etwas enger, damit mehr für Verlauf und Mikrofon bleibt */
+  #s-start .kopf{padding:12px 20px 6px}
+  #s-start .modus{margin:0 16px 6px}
+  #s-start .modus-wahl{min-height:44px}
+  #s-start .post-karte{margin:0 16px 6px;min-height:56px;padding:8px 16px}
+}
+@media (max-height:620px){                                        /* sehr kurze Handys (ältere iPhones, 320 × 568): Mikrofon darf etwas kleiner werden, Abstände enger */
+  #s-start .mic-ring{margin:4px 0 6px;min-height:88px}
+  #s-start .mitte-text{padding-bottom:6px}
+  #s-start .mitte-text b{font-size:22px}
+  #s-start .mitte-text span{min-height:0}
+}
+@media (max-height:540px){                                        /* Querformat und winzige Fenster: nicht mehr in die Höhe zwingen, der Bildschirm darf scrollen (die Eingabeleiste bleibt unten stehen) */
+  #s-start{height:auto;min-height:100dvh}
+  .ist-test #s-start{height:auto;min-height:calc(100dvh - var(--band,56px))}
+}
+
+/* Verlauf (Zuletzt gesendet / Heute): jeder Eintrag eine Zeile, Text mit „…“ am Ende */
+.verlauf-hinweis{margin:-2px 0 0;padding-left:4px;font-size:14px;line-height:1.3;color:var(--leise)}
+.verlauf .eintrag{flex-direction:row;align-items:center;gap:8px;padding:10px 12px;min-height:46px;border-radius:14px}
+.verlauf .eintrag.test{border-left:6px solid var(--test);padding-left:8px}
+.verlauf .eintrag-text{flex:1 1 0;min-width:0;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.verlauf .zeit{margin-left:0;flex:none;white-space:nowrap}
+.mini{display:inline-flex;align-items:center;gap:2px;flex:none;font-size:13px;color:var(--leise)}
+.mini svg{width:16px;height:16px}
+#s-gesendet .knopf-stapel{position:sticky;bottom:0;padding-top:10px;background:var(--grund)}      /* „Neue Nachricht“ bleibt auf kurzen Handys immer im Bild */
 
 /* Aufnahme */
 .mitschrift{margin:8px 16px 0;padding:18px 18px 22px;display:flex;flex-direction:column;gap:10px;min-height:250px;max-height:42dvh;overflow:auto}
@@ -195,7 +236,7 @@ button{cursor:pointer}
 .test-banner{position:sticky;top:0;z-index:30;display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:52px;padding:8px 14px;padding-top:calc(8px + env(safe-area-inset-top));background:var(--test);color:var(--test-dunkel);font-size:16px;font-weight:700;line-height:1.25}
 .test-banner-text{letter-spacing:.02em}
 .test-banner-knopf{flex:none;min-height:36px;padding:0 12px;border:2px solid var(--test-dunkel);border-radius:999px;background:transparent;color:var(--test-dunkel);font-size:14px;font-weight:700;white-space:nowrap}
-.ist-test .screen{padding-top:0;min-height:calc(100dvh - 52px)}
+.ist-test .screen{padding-top:0;min-height:calc(100dvh - var(--band,56px))}      /* --band: die wirkliche Höhe des Bandes (app.js, bandHoehe) */
 .modus{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:4px 16px 8px;padding:5px;background:#E1E8E3;border-radius:18px}
 .modus-wahl{min-height:52px;border:0;border-radius:14px;background:transparent;color:var(--leise);font-size:19px;font-weight:700}
 .modus-wahl[aria-pressed="true"]{background:var(--gruen);color:#fff}
