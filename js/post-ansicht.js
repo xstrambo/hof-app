@@ -1,6 +1,6 @@
-// Oberfläche der Post: offene Rückfragen beantworten, erledigte ansehen. Reine Darstellung – geholt, geprüft und gespeichert wird in post.js,
+// Oberfläche der Post: offene Rückfragen beantworten, „Für dich“ (Dokumente, Ergebnisse, Hinweise) ansehen, erledigte ansehen. Reine Darstellung – geholt, geprüft und gespeichert wird in post.js,
 // gesendet wird in app.js (normale Warteschlange). Alles, was vom Laptop kommt, wird nur als Text eingesetzt (nie als HTML).
-import { offene, erledigte, ergebnisText } from './post.js';
+import { offene, erledigte, dinge, ergebnisText, schluesselVon } from './post.js';
 import { TEST } from './modus.js';
 
 function el(tag, klasse, text) {
@@ -23,8 +23,13 @@ const STATUS_TEXT = {
   abgeholt: 'Der Laptop hat sie. Die Bestätigung kommt gleich.',
 };
 
-// ctx: { stand, modus, aenderungenAktiv, entwuerfe: Map, status: Map(nachricht-id -> 'wartet'|'gesendet'|'abgeholt'), zeit(isoText) -> Text,
-//        beiAntwort(f, antwort) -> Promise<boolean>, hinweis: Text, echtOffen: Zahl (nur im Test-Modus angezeigt), zuletzt: Text }
+// Welche „Für dich“-Einträge zeigt dieses Handy gerade? Nur, wenn die Funktion dafür freigegeben ist.
+export function sichtbareDinge(stand, modus, dingeAktiv) {
+  return dingeAktiv ? dinge(stand, modus) : [];
+}
+
+// ctx: { stand, modus, aenderungenAktiv, dingeAktiv, entwuerfe: Map, status: Map(nachricht-id -> 'wartet'|'gesendet'|'abgeholt'), zeit(isoText) -> Text,
+//        beiAntwort(f, antwort) -> Promise<boolean>, beiDing(aktion: 'oeffnen' | 'erledigt', d) -> Promise, hinweis: Text, echtOffen: Zahl (nur im Test-Modus angezeigt), zuletzt: Text }
 export function zeichnePost(wurzel, ctx) {
   const test = ctx.modus === TEST;
   const offen = sichtbareFragen(ctx.stand, ctx.modus, ctx.aenderungenAktiv);
@@ -47,6 +52,12 @@ export function zeichnePost(wurzel, ctx) {
   }
   for (const f of offen) liste.appendChild(frageKarte(f, ctx));
 
+  const meine = sichtbareDinge(ctx.stand, ctx.modus, ctx.dingeAktiv);
+  wurzel.querySelector('#post-dinge-kopf').hidden = !meine.length;
+  const dBox = wurzel.querySelector('#post-dinge');
+  dBox.replaceChildren();
+  for (const d of meine) dBox.appendChild(dingKarte(d, ctx));
+
   const box = wurzel.querySelector('#post-erledigt');
   box.replaceChildren();
   wurzel.querySelector('#post-erledigt-kopf').hidden = !fertig.length;
@@ -64,6 +75,48 @@ export function zeichnePost(wurzel, ctx) {
 }
 
 function chip(t) { return el('span', 'chip', t); }
+
+const DING_NAME = { dokument: 'Dokument', ergebnis: 'Ergebnis', hinweis: 'Hinweis' };
+function groesseText(b) {
+  return b < 1024 * 1024 ? Math.max(1, Math.round(b / 1024)) + ' KB' : (b / 1048576).toFixed(1).replace('.', ',') + ' MB';
+}
+
+// Ein Dokument, Ergebnis oder Hinweis „für dich“: lesen, das PDF öffnen, mit „Erledigt“ wegräumen. Alles nur als Text eingesetzt.
+function dingKarte(d, ctx) {
+  const k = d.kopf;
+  const karte = el('article', 'ding' + (d.instanz === TEST ? ' test' : ''));
+  karte.dataset.key = `${d.instanz}:${d.id}`;
+  karte.dataset.ding = d.id;
+  const kopf = el('div', 'eintrag-fuss');
+  kopf.appendChild(chip(DING_NAME[k.ding]));
+  if (k.werkzeug_titel) kopf.appendChild(chip(k.werkzeug_titel));
+  if (d.instanz === TEST) { const c = chip('Test'); c.classList.add('test'); kopf.appendChild(c); }
+  kopf.appendChild(el('span', 'zeit', ctx.zeit(k.erstellt || k.gesendet)));
+  karte.appendChild(kopf);
+  karte.appendChild(el('b', 'ding-titel', k.titel));
+  if (k.text) karte.appendChild(el('p', 'ding-text', k.text));
+  const zu = k.bezug ? ctx.stand.fragen[schluesselVon(d.instanz, k.bezug)] : null;           // gehört das zu einer Frage, die dieses Handy kennt?
+  if (zu && zu.kopf) karte.appendChild(el('p', 'ding-zu leise klein', 'Zur Frage: ' + zu.kopf.text.split('\n')[0].slice(0, 90)));
+  const zeile = el('div', 'ding-knoepfe');
+  if (k.datei) {
+    const auf = el('button', 'knopf haupt' + (d.instanz === TEST ? ' test' : ''), `PDF öffnen (${groesseText(k.datei.groesse)})`);
+    auf.type = 'button';
+    auf.dataset.aktion = 'oeffnen';
+    auf.addEventListener('click', () => ctx.beiDing('oeffnen', d));
+    zeile.appendChild(auf);
+  } else if (k.ding === 'dokument') {
+    karte.appendChild(el('p', 'ding-hinweis leise klein', k.datei_fehlt === 'zu_gross'
+      ? `Das PDF ist zu groß fürs Handy (mehr als 10 MB). Es liegt am Laptop${k.datei_name ? ': ' + k.datei_name : ''}.`
+      : 'Das PDF konnte nicht aufs Handy geladen werden. Es liegt am Laptop.'));
+  }
+  const fertig = el('button', 'knopf neben', 'Erledigt');
+  fertig.type = 'button';
+  fertig.dataset.aktion = 'erledigt';
+  fertig.addEventListener('click', () => ctx.beiDing('erledigt', d));
+  zeile.appendChild(fertig);
+  karte.appendChild(zeile);
+  return karte;
+}
 
 function frageKarte(f, ctx) {
   const k = f.kopf;

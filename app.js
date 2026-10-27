@@ -5,8 +5,8 @@ import { packen, verschluesseln, fotoVerkleinern } from './js/paket.js';
 import { Aufnahme, liveTextMoeglich } from './js/sprache.js';
 import { ECHT, TEST, lesModus, schreibModus, wirksamerModus, testErlaubt, schluesselFuer, zielVon, testBlockiert, TEXTE } from './js/modus.js';
 import { ladeFunktionen, sichtbar as funktionSichtbar, anwenden as funktionenAnwenden } from './js/funktionen.js';
-import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon } from './js/post.js';
-import { zeichnePost, sichtbareFragen } from './js/post-ansicht.js';
+import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon, dateiSchluessel } from './js/post.js';
+import { zeichnePost, sichtbareFragen, sichtbareDinge } from './js/post-ansicht.js';
 import { FUNKTION as CLOUD, MAX_SEKUNDEN, erkennen, hinweisFuer, wiederholbar, pauseMs, textVerbinden, HINWEIS_LEER, HINWEIS_LAEUFT, HINWEIS_FERTIG } from './js/erkennung.js';
 
 // ---------- Einstellungen ----------
@@ -711,6 +711,7 @@ const postEntwuerfe = new Map();
 
 const postAktiv = () => !!geraet && geraet.status === 'frei' && geraet.rolle === 'admin' && funktionAktiv('rueckfragen');
 const aenderungenAktiv = () => funktionAktiv('aenderungen');
+const dingeAktiv = () => funktionAktiv('fuer_dich');
 
 async function postLaden() { try { postStand = normStand(await einstellung.hole(STAND_NAME)); } catch { postStand = neuerStand(); } }
 async function postSpeichern(stand) { try { await einstellung.setze(STAND_NAME, stand); } catch { /* beim nächsten Mal */ } }
@@ -724,7 +725,11 @@ async function postHolen() {
   if (!privatKey) return;
   postLaeuft = true;
   try {
-    const r = await postHolenLogik({ kasten, geraet, config, privatKey, stand: postStand, speichern: postSpeichern, test: modus === TEST });
+    const r = await postHolenLogik({
+      kasten, geraet, config, privatKey, stand: postStand, speichern: postSpeichern, test: modus === TEST,
+      dateiSpeichern: (key, bytes) => einstellung.setze(dateiSchluessel(key), bytes),           // das PDF eines „Für dich“-Eintrags
+      dateiLoeschen: key => einstellung.loesche(dateiSchluessel(key)),
+    });
     if (r.schluesselFehlt) {                                   // dieses Handy hat dem Briefkasten noch keinen öffentlichen Schlüssel gegeben: nachtragen
       const oeff = await geraeteSchluessel();
       if (oeff) await kasten.schluesselSetzen(geraet.token, oeff, modus === TEST).catch(() => {});
@@ -741,9 +746,13 @@ async function postHolen() {
 
 function postAnzeigen() {
   const warten = sichtbareFragen(postStand, modus, aenderungenAktiv()).filter(f => !(f.meine && f.meine.stand === f.kopf.stand)).length;
+  const dinge = sichtbareDinge(postStand, modus, dingeAktiv()).length;
   const zaehler = $('#post-zaehler');
-  zaehler.textContent = String(warten); zaehler.hidden = !warten;
-  $('#post-untertitel').textContent = warten ? (warten === 1 ? '1 Frage wartet auf dich' : warten + ' Fragen warten auf dich') : 'Keine offenen Fragen';
+  zaehler.textContent = String(warten + dinge); zaehler.hidden = !(warten + dinge);
+  const teile = [];
+  if (warten) teile.push(warten === 1 ? '1 Frage wartet auf dich' : warten + ' Fragen warten auf dich');
+  if (dinge) teile.push(dinge === 1 ? '1 Sache für dich' : dinge + ' Sachen für dich');
+  $('#post-untertitel').textContent = teile.length ? teile.join(' · ') : 'Keine offenen Fragen';
   $('#b-post').hidden = geraet?.rolle !== 'admin';
   if (aktuell === 's-post') postZeichnen();
 }
@@ -753,19 +762,45 @@ async function postZeichnen(erzwingen = false) {
   try { for (const n of await nachrichten.alle()) if (n.art === 'antwort') status.set(n.id, n.status); } catch { /* ohne Status */ }
   const zeigen = sichtbareFragen(postStand, modus, aenderungenAktiv());
   const ctx = {
-    stand: postStand, modus, aenderungenAktiv: aenderungenAktiv(), entwuerfe: postEntwuerfe, status, beiAntwort: postAntworten,
+    stand: postStand, modus, aenderungenAktiv: aenderungenAktiv(), dingeAktiv: dingeAktiv(), entwuerfe: postEntwuerfe, status, beiAntwort: postAntworten, beiDing: postDing,
     zeit: iso => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : zeitText(d.getTime()); },
     hinweis: postFehler === 'nicht_bereit' ? (modus === TEST ? 'Der Test-Briefkasten kann das noch nicht. Bitte Claude Bescheid geben.' : 'Der Briefkasten kann das noch nicht.')
       : postFehler === 'netz' ? 'Kein Netz – die Liste ist vom letzten Mal.' : postFehler === 'fehler' ? 'Das Aktualisieren hat nicht geklappt. Gleich noch ein Versuch.' : '',
     echtOffen: modus === TEST ? sichtbareFragen(postStand, ECHT, aenderungenAktiv()).length : 0,
     zuletzt: postZuletzt ? 'Zuletzt aktualisiert: ' + zeitText(postZuletzt) : '',
   };
-  const signatur = JSON.stringify([modus, ctx.aenderungenAktiv, ctx.hinweis, ctx.echtOffen, [...status],
+  const signatur = JSON.stringify([modus, ctx.aenderungenAktiv, ctx.dingeAktiv, ctx.hinweis, ctx.echtOffen, [...status],
     zeigen.map(f => [f.instanz, f.id, f.kopf.stand, f.meine && f.meine.id]),
+    sichtbareDinge(postStand, modus, ctx.dingeAktiv).map(d => [d.instanz, d.id, d.kopf]),                      // der ganze Kopf: zwei Fassungen in derselben Sekunde unterscheiden sich nur im Inhalt
     postErledigte(postStand, modus).map(f => [f.instanz, f.id, f.zustand, f.erledigt.antwort, f.erledigt.gesehen, f.meine && f.meine.id])]);
   if (!erzwingen && signatur === postZeichnung) { $('#post-stand').textContent = ctx.zuletzt; return; }
   postZeichnung = signatur;
   zeichnePost($('#s-post'), ctx);
+}
+
+// „Für dich“: das PDF öffnen oder den Eintrag mit „Erledigt“ wegräumen (auch das PDF auf dem Handy). Auf dem Laptop bleibt alles, wie es ist.
+async function postDing(aktion, d) {
+  const key = schluesselVon(d.instanz, d.id);
+  if (aktion === 'oeffnen') {
+    let bytes = null;
+    try { bytes = await einstellung.hole(dateiSchluessel(key)); } catch { bytes = null; }
+    if (!bytes || !bytes.length) { meldung('Das PDF ist auf diesem Handy nicht mehr da. Es liegt am Laptop.', 6000); return; }
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    if (!window.open(url, '_blank')) {                          // Popup gesperrt (oder eine App ohne Tabs): als Datei anbieten
+      const a = document.createElement('a');
+      a.href = url; a.download = (d.kopf.datei && d.kopf.datei.name) || 'dokument.pdf';
+      document.body.appendChild(a); a.click(); a.remove();
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 5 * 60 * 1000);
+    return;
+  }
+  if (aktion === 'erledigt') {
+    delete postStand.dinge[key];
+    try { await einstellung.loesche(dateiSchluessel(key)); } catch { /* bleibt höchstens liegen */ }
+    await postSpeichern(postStand);
+    postAnzeigen();
+    postZeichnen(true);
+  }
 }
 
 // Eine Antwort bauen (beglaubigt, nur für den Laptop dieser Instanz verschlüsselt) und in die Warteschlange legen.

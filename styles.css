@@ -283,5 +283,13 @@ button{cursor:pointer}
 .zusammen{margin:0;text-align:center}
 .frage-gesendet{display:flex;flex-direction:column;gap:2px;background:var(--gruen-hell);border-radius:14px;padding:12px 14px}
 .frage-antwort{font-size:19px;font-weight:700;overflow-wrap:anywhere}
+.ding{background:var(--flaeche);border:1px solid var(--linie);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.ding.test{border-left:6px solid var(--test)}
+.ding-titel{font-size:19px;line-height:1.3;overflow-wrap:anywhere}
+.ding-text{margin:0;font-size:17px;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere}
+.ding-zu{margin:0;overflow-wrap:anywhere}
+.ding-knoepfe{display:flex;flex-wrap:wrap;gap:8px}
+.ding-knoepfe .knopf{flex:1 1 140px}
+.ding-hinweis{margin:0;overflow-wrap:anywhere}
 .erledigt-eintrag .eintrag-text{-webkit-line-clamp:3}
 .ergebnis{font-size:15px;color:var(--leise);overflow-wrap:anywhere}
