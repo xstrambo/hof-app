@@ -81,6 +81,8 @@ button{cursor:pointer}
 .mitschrift{margin:8px 16px 0;padding:18px 18px 22px;display:flex;flex-direction:column;gap:10px;min-height:250px;max-height:42dvh;overflow:auto}
 .mitschrift p{margin:0;font-size:24px;line-height:1.4;overflow-wrap:anywhere}
 .vorlaeufig{color:var(--leise)}
+.mitschrift .live-hinweis{font-size:16px;line-height:1.4}
+.live-hinweis small{display:block;margin-top:4px;font-size:13px;opacity:.85}
 .cursor{display:inline-block;width:3px;height:26px;margin-left:3px;vertical-align:-4px;background:var(--gruen);animation:blink 1s steps(1) infinite}
 .pegel{display:flex;align-items:center;gap:4px;height:52px}
 .pegel span{width:5px;border-radius:3px;background:var(--rot);opacity:.85;height:6px;transition:height .08s}

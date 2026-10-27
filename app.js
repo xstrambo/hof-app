@@ -19,8 +19,15 @@ const $$ = s => [...document.querySelectorAll(s)];
 let geraet = null;          // {token, id, rolle, status, name}
 let entwurf = neuerEntwurf();
 let aufnahme = null;
-let liveTextAus = false; // auf diesem Handy gehen Erkennung und Aufnahme nicht zusammen -> Aufnahme hat Vorrang
 const HINWEIS_KEIN_LIVETEXT = 'Live-Text auf diesem Handy nicht verfügbar – die Aufnahme wird später abgeschrieben.';
+// Ruhiger Hinweis auf dem Aufnahme-Bildschirm, wenn statt Live-Text aufgenommen wird (je nach Grund)
+const HINWEIS_WECHSEL = {
+  netz: 'Live-Text braucht Netz – ich nehme stattdessen auf. Der Laptop schreibt es\u00A0ab.',
+  fehlt: 'Live-Text gibt es auf diesem Handy nicht – ich nehme auf. Der Laptop schreibt es\u00A0ab.',
+  stumm: 'Es kommt kein Text an – ich nehme stattdessen auf. Der Laptop schreibt es\u00A0ab.',
+  standard: 'Live-Text klappt hier nicht – ich nehme stattdessen auf. Der Laptop schreibt es\u00A0ab.',
+};
+HINWEIS_WECHSEL.aus = HINWEIS_WECHSEL.fehlt;
 let aktuell = null;
 
 function neuerEntwurf() { return { text: '', audio: null, audioDauer: 0, anhaenge: [] }; }
@@ -75,7 +82,9 @@ async function starten() {
   geraet = await einstellung.hole('geraet');
   const gespeichert = await einstellung.hole('entwurf');
   if (gespeichert) entwurf = { ...neuerEntwurf(), ...gespeichert };
-  if (await einstellung.hole('livetext-aus')) liveTextAus = true;
+  // Alte Fassungen haben hier gemerkt "Live-Text geht auf diesem Handy nicht" und ihn für immer abgeschaltet.
+  // Jetzt wird jedes Mal zuerst Live-Text versucht und bei Bedarf automatisch umgeschaltet: Merker wegräumen.
+  einstellung.loesche('livetext-aus').catch(() => {});
   startHinweis();
   if (!geraet) return zeige('s-zugang', { verlauf: false });
   setzeName();
@@ -161,25 +170,26 @@ async function sprechenStarten(nochmal) {
   const vorher = entwurf.text.trim();
   $('#live-fest').textContent = vorher ? vorher + ' ' : '';
   $('#live-vorlaeufig').textContent = '';
+  aufnahmeModus(null);
   zeige('s-aufnahme');
-  aufnahme = new Aufnahme({
-    liveText: config.live_text === 'handy' && !liveTextAus,
+  // Zuerst läuft nur die Spracherkennung (Live-Text). Geht die nicht, schaltet Aufnahme von selbst auf reine
+  // Tonaufnahme um und meldet das über beiWechsel. So greifen nie beide gleichzeitig aufs Mikrofon zu.
+  const a = new Aufnahme({
+    liveText: config.live_text === 'handy',
     beiText: (fest, vor) => {
       $('#live-fest').textContent = [vorher, fest].filter(Boolean).join(' ') + (vor ? ' ' : '');
       $('#live-vorlaeufig').textContent = vor;
       const m = $('.mitschrift'); m.scrollTop = m.scrollHeight;
     },
     beiPegel: p => { const jetzt = performance.now(); if (jetzt - (pegel._t || 0) < 80) return; pegel._t = jetzt; const b = pegel.firstChild; pegel.appendChild(b); b.style.height = Math.max(6, p * 52) + 'px'; },
-    beiProblem: art => {
-      if (art === 'kein-livetext') meldung(HINWEIS_KEIN_LIVETEXT, 5000);
-      if (art === 'livetext-netz') meldung('Live-Text braucht Netz – die Aufnahme wird später abgeschrieben.', 5000);
-      if (art === 'aufnahme') meldung('Tonaufnahme geht nicht, nur Live-Text.', 4000);
-    },
+    beiWechsel: grund => { if (aufnahme === a) aufnahmeModus(grund); },
+    beiProblem: art => { if (aufnahme === a) aufnahmeGescheitert(art); },
   });
-  try { await aufnahme.starten(); }
-  catch {
-    aufnahme = null;
-    meldung('Bitte das Mikrofon erlauben (Schloss-Symbol oben in der Adresszeile).', 6000);
+  aufnahme = a;
+  try { await a.starten(); }
+  catch (err) {
+    if (aufnahme === a) aufnahme = null;
+    meldung(mikrofonText(err && err.message), 6000);
     history.back();
     return;
   }
@@ -193,26 +203,56 @@ async function sprechenStarten(nochmal) {
   }, 250);
 }
 
-$('#b-fertig').addEventListener('click', async () => {
+function mikrofonText(art) {
+  return art === 'mikrofon' ? 'Bitte das Mikrofon erlauben (Schloss-Symbol oben in der Adresszeile).' : 'Die Aufnahme geht auf diesem Handy gerade nicht.';
+}
+
+// grund = null: Live-Text läuft. Sonst: es wird stattdessen aufgenommen (ruhiger Hinweis im Textfeld).
+function aufnahmeModus(grund) {
+  const t = $('#live-titel'), h = $('#live-hinweis'), c = $('.cursor');
+  if (t) t.textContent = grund ? 'Wird aufgenommen' : 'Wird mitgeschrieben';
+  if (c) c.hidden = !!grund; // beim reinen Aufnehmen schreibt niemand mit: kein blinkender Cursor
+  const hinweis = grund ? (HINWEIS_WECHSEL[grund] || HINWEIS_WECHSEL.standard) : '';
+  // Bei unerwartetem Ausfall steht der technische Code klein darunter (hilft, wenn es auf einem Handy nicht klappt)
+  const code = grund && !['aus', 'fehlt', 'netz'].includes(grund) ? grund : '';
+  if (h) {
+    h.textContent = hinweis;
+    if (code) { const k = document.createElement('small'); k.textContent = 'Code: ' + code; h.appendChild(k); }
+    h.hidden = !grund;
+  } else if (hinweis) meldung(hinweis, 7000);
+  const m = $('.mitschrift'); m.scrollTop = m.scrollHeight;
+}
+
+// Weder Live-Text noch Aufnahme geht (z. B. Mikrofon nicht erlaubt). Schon erkannter Text bleibt erhalten.
+async function aufnahmeGescheitert(art) {
+  const a = aufnahme; if (!a) return;
+  if (a.textBisher()) { await aufnahmeBeenden(); meldung(mikrofonText(art), 6000); return; }
+  a.abbrechen(); aufnahme = null; clearInterval(uhrTimer);
+  meldung(mikrofonText(art), 6000);
+  history.back();
+}
+
+async function aufnahmeBeenden() {
   if (!aufnahme) return;
   const a = aufnahme; aufnahme = null; clearInterval(uhrTimer);
   $('#b-fertig').disabled = true;
-  const r = await a.beenden();
-  $('#b-fertig').disabled = false;
-  if (r.stummeAufnahme) {
-    // Erkennung hat das Mikrofon belegt, die Aufnahme ist leer: ab jetzt nur noch aufnehmen.
-    liveTextAus = true; einstellung.setze('livetext-aus', true);
-    r.audio = null;
-    meldung('Auf diesem Handy gehen Live-Text und Aufnahme nicht zusammen. Ab jetzt wird nur aufgenommen.', 7000);
-  }
-  entwurf.text = [entwurf.text.trim(), r.text].filter(Boolean).join(' ');
+  let r;
+  try { r = await a.beenden(); }
+  catch (err) { console.error(err); r = { text: a.textBisher(), audio: null, dauer: 0, audioDauer: 0 }; } // erkannter Text geht nie verloren
+  finally { $('#b-fertig').disabled = false; }
+  // Wurde erst Text erkannt und dann umgeschaltet, steht der Rest nur in der Aufnahme: kurzer Hinweis im Text.
+  const neu = r.teilweise ? (r.text + ' [Weiter in der Sprachnachricht]').trim() : r.text;
+  entwurf.text = [entwurf.text.trim(), neu].filter(Boolean).join(' ');
   if (r.audio) {
     // Bei "Nochmal sprechen" kommt eine zweite Aufnahme dazu; die erste bleibt als Anhang erhalten.
     if (entwurf.audio) entwurf.anhaenge.push(new File([entwurf.audio], 'sprache-1.' + endung(entwurf.audio.type), { type: entwurf.audio.type }));
-    entwurf.audio = r.audio; entwurf.audioDauer = r.dauer;
+    entwurf.audio = r.audio; entwurf.audioDauer = r.audioDauer || r.dauer;
+  } else if (!r.text && r.dauer >= 2) {
+    meldung('Es wurde nichts erkannt. Bitte nochmal sprechen oder tippen.', 4500);
   }
   zeigePruefen(true);
-});
+}
+$('#b-fertig').addEventListener('click', aufnahmeBeenden);
 $('#b-abbrechen').addEventListener('click', () => { if (aufnahme) { aufnahme.abbrechen(); aufnahme = null; } history.back(); });
 
 // ---------- Prüfen ----------
@@ -222,6 +262,10 @@ function zeigePruefen(ersetzen) {
   const az = $('#audio-zeile');
   az.hidden = !entwurf.audio;
   $('#audio-label').textContent = 'Sprachaufnahme · ' + dauerText(entwurf.audioDauer) + ' · geht mit';
+  // Nur Aufnahme, kein Text (Live-Text ging nicht): sagen, dass der Laptop abschreibt
+  $('#hof-text').placeholder = entwurf.audio && !entwurf.text.trim()
+    ? 'Kein Text – der Laptop schreibt die Aufnahme ab. Du kannst auch selbst etwas tippen.'
+    : 'Hier steht, was du gesagt hast.';
   zeichneAnhaenge();
   if (ersetzen) { history.replaceState({ s: 's-pruefen' }, ''); zeige('s-pruefen', { verlauf: false }); }
   else zeige('s-pruefen');
@@ -482,7 +526,7 @@ function zeitText(ms) {
 function endung(typ) { return typ.includes('mp4') ? 'm4a' : typ.includes('ogg') ? 'ogg' : 'webm'; }
 
 function startHinweis() {
-  if (config.live_text !== 'handy' || !liveTextMoeglich || liveTextAus) $('#start-hinweis').textContent = HINWEIS_KEIN_LIVETEXT;
+  if (config.live_text !== 'handy' || !liveTextMoeglich) $('#start-hinweis').textContent = HINWEIS_KEIN_LIVETEXT;
 }
 
 // Für Tests
