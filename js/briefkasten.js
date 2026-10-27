@@ -8,16 +8,21 @@ export class BriefkastenFehler extends Error {
 
 export function briefkastenFuer(config) {
   if (config.attrappe) return new Attrappe();
-  return new Echt(config.funktionUrl, config.oeffentlicherSchluessel);
+  return new Echt(config.funktionUrl, config.oeffentlicherSchluessel, config.testFunktionUrl);
 }
 
 class Echt {
-  constructor(url, anonSchluessel) { this.url = url; this.anon = anonSchluessel; }
+  constructor(url, anonSchluessel, testUrl = '') { this.url = url; this.anon = anonSchluessel; this.testUrl = typeof testUrl === 'string' ? testUrl.trim() : ''; }
 
-  async rufe(aktion, daten = {}, token, koerper) {
+  kopf(aktion, token) {
     const kopf = { 'x-hof-aktion': aktion };
     if (this.anon) { kopf.apikey = this.anon; kopf.authorization = 'Bearer ' + this.anon; }
     if (token) kopf['x-hof-token'] = token;
+    return kopf;
+  }
+
+  async rufe(aktion, daten = {}, token, koerper, url = this.url) {
+    const kopf = this.kopf(aktion, token);
     let body;
     if (koerper) {
       kopf['content-type'] = 'application/octet-stream';
@@ -28,12 +33,29 @@ class Echt {
       body = JSON.stringify(daten);
     }
     let r;
-    try { r = await fetch(this.url, { method: 'POST', headers: kopf, body }); }
+    try { r = await fetch(url, { method: 'POST', headers: kopf, body }); }
     catch { throw new BriefkastenFehler('netz', 'Kein Netz'); }
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new BriefkastenFehler(j.fehler || 'server', j.text);
     return j;
   }
+
+  // Antwort als rohe Bytes (ein verschlüsselter Umschlag)
+  async rufeRoh(aktion, daten = {}, token, url = this.url) {
+    let r;
+    try { r = await fetch(url, { method: 'POST', headers: { ...this.kopf(aktion, token), 'content-type': 'application/json' }, body: JSON.stringify(daten) }); }
+    catch { throw new BriefkastenFehler('netz', 'Kein Netz'); }
+    if (!r.ok) { const j = await r.json().catch(() => ({})); throw new BriefkastenFehler(j.fehler || 'server', j.text); }
+    return new Uint8Array(await r.arrayBuffer());
+  }
+
+  // Rückfragen vom Laptop (neue Aktionen). Solange sie nur in der Test-Fassung des Briefkastens laufen, geht der Test-Modus dorthin
+  // (testFunktionUrl in config.js); danach steht dort nichts mehr und alles läuft über die eine Funktion.
+  ziel(test) { return test && this.testUrl ? this.testUrl : this.url; }
+  antwortenListe(token, test = false) { return this.rufe('antworten_liste', {}, token, undefined, this.ziel(test)); }
+  antwortHolen(token, id, test = false) { return this.rufeRoh('antwort_holen', { id }, token, this.ziel(test)); }
+  antwortQuittieren(token, id, test = false) { return this.rufe('antwort_quittieren', { id }, token, undefined, this.ziel(test)); }
+  schluesselSetzen(token, schluessel, test = false) { return this.rufe('schluessel_setzen', { schluessel }, token, undefined, this.ziel(test)); }
 
   anmelden(code, name, schluessel) { return this.rufe('anmelden', { code, name, schluessel }); }
   status(token) { return this.rufe('status', {}, token); }
@@ -132,6 +154,39 @@ class Attrappe {
     return { ok: true };
   }
   async sperren(token, geraet) { return this.freigeben(token, geraet, false); }
+
+  // Rückfragen vom Laptop: in der Attrappe liegen sie in z.antworten ({id, instanz, umschlag als Base64}); zum Ausprobieren im Browser.
+  async antwortenListe(token) {
+    await this.warte();
+    const z = this.zustand();
+    const g = this.geraet(z, token);
+    return { hat_schluessel: !!g.schluessel, antworten: (z.antworten || []).filter(a => a.an === g.id && !a.abgeholt).map(({ id, instanz }) => ({ id, instanz, groesse: 1 })) };
+  }
+  async antwortHolen(token, id) {
+    await this.warte();
+    const z = this.zustand();
+    const g = this.geraet(z, token);
+    const a = (z.antworten || []).find(x => x.id === id && x.an === g.id && !x.abgeholt);
+    if (!a) throw new BriefkastenFehler('fehlt', 'nicht da');
+    return Uint8Array.from(atob(a.umschlag), c => c.charCodeAt(0));
+  }
+  async antwortQuittieren(token, id) {
+    await this.warte();
+    const z = this.zustand();
+    const g = this.geraet(z, token);
+    const a = (z.antworten || []).find(x => x.id === id && x.an === g.id);
+    if (a) { a.abgeholt = true; a.umschlag = null; this.schreib(z); }
+    return { ok: true };
+  }
+  async schluesselSetzen(token, schluessel) {
+    await this.warte();
+    const z = this.zustand();
+    const g = this.geraet(z, token);
+    if (g.schluessel && g.schluessel !== schluessel) throw new BriefkastenFehler('schluessel_vorhanden', 'schon vorhanden');
+    g.schluessel = schluessel;
+    this.schreib(z);
+    return { ok: true };
+  }
 }
 
 const ZEICHEN = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // ohne 0/O, 1/I

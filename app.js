@@ -5,6 +5,8 @@ import { packen, verschluesseln, fotoVerkleinern } from './js/paket.js';
 import { Aufnahme, liveTextMoeglich } from './js/sprache.js';
 import { ECHT, TEST, lesModus, schreibModus, wirksamerModus, testErlaubt, schluesselFuer, zielVon, testBlockiert, TEXTE } from './js/modus.js';
 import { ladeFunktionen, sichtbar as funktionSichtbar, anwenden as funktionenAnwenden } from './js/funktionen.js';
+import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon } from './js/post.js';
+import { zeichnePost, sichtbareFragen } from './js/post-ansicht.js';
 
 // ---------- Einstellungen ----------
 const config = { live_text: 'handy', testSchluessel: '', testRollen: ['admin'], ...grundConfig };
@@ -56,6 +58,7 @@ function zeige(id, { verlauf = true } = {}) {
   window.scrollTo(0, 0);
   if (id === 's-start' || id === 's-gesendet') zeichneListen();
   if (id === 's-freigaben') ladeFreigaben();
+  if (id === 's-post') { postZeichnen(true); postHolen(); }
 }
 window.addEventListener('popstate', e => {
   blattZu();
@@ -87,6 +90,7 @@ async function starten() {
   if ('serviceWorker' in navigator && !config.attrappe) navigator.serviceWorker.register('sw.js').catch(() => {});
   netzAnzeigen();
   geraet = await einstellung.hole('geraet');
+  await postLaden();
   modusSetzen(lesModus(), { merken: false });
   funktionenLaden();
   const gespeichert = await einstellung.hole('entwurf');
@@ -443,18 +447,19 @@ async function freigabenPunkt() {
 let hintergrundLaeuft = false;
 function hintergrund() {
   $('#b-freigaben').hidden = geraet?.rolle !== 'admin';
+  postAnzeigen();
   if (hintergrundLaeuft) return;
   hintergrundLaeuft = true;
   aufraeumen().catch(() => {});
-  const runde = () => { if (document.visibilityState === 'visible') { postausgang(); quittungenHolen(); freigabenPunkt(); } };
+  const runde = () => { if (document.visibilityState === 'visible') { postausgang(); quittungenHolen(); freigabenPunkt(); postHolen(); } };
   runde();
-  setInterval(runde, 20000);
+  setInterval(runde, 30000);                 // alle 30 Sekunden (und sofort, wenn die App wieder sichtbar wird)
   document.addEventListener('visibilitychange', runde);
 }
 
 // ---------- Listen ----------
 async function zeichneListen() {
-  const alle = await nachrichten.alle();
+  const alle = (await nachrichten.alle()).filter(n => n.art !== 'antwort');     // Antworten auf Rückfragen stehen in der Post, nicht hier
   fuelle($('#liste-start'), alle.slice(0, 3));
   const heute = new Date(); heute.setHours(0, 0, 0, 0);
   fuelle($('#liste-gesendet'), alle.filter(n => n.erstellt >= heute.getTime() || n.status === 'wartet').slice(0, 6));
@@ -537,6 +542,11 @@ $('#b-teilen').addEventListener('click', async () => {
   else { try { await navigator.clipboard.writeText(text); meldung('Kopiert – jetzt z. B. in WhatsApp einfügen.'); } catch { meldung(code); } }
 });
 
+// ---------- Post (Knöpfe) ----------
+$('#b-post').addEventListener('click', () => zeige('s-post'));
+$('#b-zurueck-post').addEventListener('click', () => history.back());
+$('#b-post-neu').addEventListener('click', () => { postNichtBereitBis = 0; postHolen(); });
+
 // ---------- Echt | Test ----------
 // Der Schalter steht auf dem Startbildschirm (nur für Geräte, die ihn sehen dürfen); im Test-Modus liegt ein oranges Band über jedem
 // Bildschirm, und der Sendeknopf ist orange. Der Modus bleibt auf diesem Gerät gemerkt (Standard: Echt).
@@ -556,13 +566,15 @@ function modusAnzeigen() {
   $('#senden-text').textContent = test ? TEXTE.sendenTest : TEXTE.senden;
   document.title = test ? 'Hof-App (TEST)' : 'Hof-App';
   funktionenAnzeigen();
+  postAnzeigen();
 }
-$('#m-echt').addEventListener('click', () => modusSetzen(ECHT));
+$('#m-echt').addEventListener('click', () => { modusSetzen(ECHT); postHolen(); });
 $('#m-test').addEventListener('click', () => {
   modusSetzen(TEST);
   if (modus === TEST && !schluesselFuer(config, TEST)) meldung(TEXTE.keinSchluessel.test, 6000);
+  postHolen();
 });
-$('#b-zu-echt').addEventListener('click', () => modusSetzen(ECHT));
+$('#b-zu-echt').addEventListener('click', () => { modusSetzen(ECHT); postHolen(); });
 
 // ---------- Neue Funktionen (erst nur im Test) ----------
 // funktionen.json sagt je Funktion "test" oder "alle" (js/funktionen.js). Wer die Datei nicht holen kann, behält den bisherigen Stand;
@@ -573,12 +585,112 @@ let funktionenGeladen = 0;
 async function funktionenLaden() {
   funktionenGeladen = Date.now();
   const neu = await ladeFunktionen();
-  if (neu) { funktionen = neu; funktionenAnzeigen(); }
+  if (neu) { funktionen = neu; funktionenAnzeigen(); postAnzeigen(); postHolen(); }
 }
 // Wer die App lange offen hat, bekommt eine neue Freigabe spätestens nach 10 Minuten (beim Zurückkehren in die App).
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && Date.now() - funktionenGeladen > 10 * 60 * 1000) funktionenLaden();
 });
+
+// ---------- Post: Rückfragen vom Laptop ----------
+// Der Laptop schickt offene Rückfragen verschlüsselt und beglaubigt an die Verwalter-Handys (nur wer dafür freigegeben ist, siehe funktionen.json:
+// „rueckfragen“; die Änderungsliste des Hof-Dienstes erst mit „aenderungen“). Hier werden sie geholt (js/post.js), angezeigt (js/post-ansicht.js) und
+// beantwortet: Die Antwort geht als beglaubigte Nachricht durch die normale Warteschlange an den Laptop. Die erste Antwort gilt – egal ob sie hier,
+// in der Zentrale oder am Laptop kam; was der Laptop meldet, zeigt dieses Handy an.
+let postStand = neuerStand();
+let postLaeuft = false;
+let postFehler = '';                 // '' | 'netz' | 'nicht_bereit' | 'fehler'
+let postNichtBereitBis = 0;
+let postZuletzt = 0;
+let postZeichnung = '';              // woran erkannt wird, ob sich die Anzeige ändern muss (damit angefangene Eingaben nicht verloren gehen)
+const postEntwuerfe = new Map();
+
+const postAktiv = () => !!geraet && geraet.status === 'frei' && geraet.rolle === 'admin' && funktionAktiv('rueckfragen');
+const aenderungenAktiv = () => funktionAktiv('aenderungen');
+
+async function postLaden() { try { postStand = normStand(await einstellung.hole(STAND_NAME)); } catch { postStand = neuerStand(); } }
+async function postSpeichern(stand) { try { await einstellung.setze(STAND_NAME, stand); } catch { /* beim nächsten Mal */ } }
+async function privaterSchluessel() {
+  try { const paar = await einstellung.hole('geraete-schluessel'); return paar && paar.privateKey ? paar.privateKey : null; } catch { return null; }
+}
+
+async function postHolen() {
+  if (postLaeuft || !postAktiv() || !navigator.onLine || Date.now() < postNichtBereitBis) return;
+  const privatKey = await privaterSchluessel();
+  if (!privatKey) return;
+  postLaeuft = true;
+  try {
+    const r = await postHolenLogik({ kasten, geraet, config, privatKey, stand: postStand, speichern: postSpeichern, test: modus === TEST });
+    if (r.schluesselFehlt) {                                   // dieses Handy hat dem Briefkasten noch keinen öffentlichen Schlüssel gegeben: nachtragen
+      const oeff = await geraeteSchluessel();
+      if (oeff) await kasten.schluesselSetzen(geraet.token, oeff, modus === TEST).catch(() => {});
+    }
+    postFehler = ''; postZuletzt = Date.now();
+  } catch (err) {
+    const code = err instanceof BriefkastenFehler ? err.code : '';
+    if (code === 'aktion') { postFehler = 'nicht_bereit'; postNichtBereitBis = Date.now() + 10 * 60 * 1000; }      // der Briefkasten kennt das noch nicht
+    else if (code === 'netz') postFehler = 'netz';
+    else if (code === 'bremse') postNichtBereitBis = Date.now() + 60 * 1000;
+    else postFehler = 'fehler';
+  } finally { postLaeuft = false; postAnzeigen(); }
+}
+
+function postAnzeigen() {
+  const warten = sichtbareFragen(postStand, modus, aenderungenAktiv()).filter(f => !(f.meine && f.meine.stand === f.kopf.stand)).length;
+  const zaehler = $('#post-zaehler');
+  zaehler.textContent = String(warten); zaehler.hidden = !warten;
+  $('#post-untertitel').textContent = warten ? (warten === 1 ? '1 Frage wartet auf dich' : warten + ' Fragen warten auf dich') : 'Keine offenen Fragen';
+  $('#b-post').hidden = geraet?.rolle !== 'admin';
+  if (aktuell === 's-post') postZeichnen();
+}
+
+async function postZeichnen(erzwingen = false) {
+  const status = new Map();
+  try { for (const n of await nachrichten.alle()) if (n.art === 'antwort') status.set(n.id, n.status); } catch { /* ohne Status */ }
+  const zeigen = sichtbareFragen(postStand, modus, aenderungenAktiv());
+  const ctx = {
+    stand: postStand, modus, aenderungenAktiv: aenderungenAktiv(), entwuerfe: postEntwuerfe, status, beiAntwort: postAntworten,
+    zeit: iso => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : zeitText(d.getTime()); },
+    hinweis: postFehler === 'nicht_bereit' ? (modus === TEST ? 'Der Test-Briefkasten kann das noch nicht. Bitte Claude Bescheid geben.' : 'Der Briefkasten kann das noch nicht.')
+      : postFehler === 'netz' ? 'Kein Netz – die Liste ist vom letzten Mal.' : postFehler === 'fehler' ? 'Das Aktualisieren hat nicht geklappt. Gleich noch ein Versuch.' : '',
+    echtOffen: modus === TEST ? sichtbareFragen(postStand, ECHT, aenderungenAktiv()).length : 0,
+    zuletzt: postZuletzt ? 'Zuletzt aktualisiert: ' + zeitText(postZuletzt) : '',
+  };
+  const signatur = JSON.stringify([modus, ctx.aenderungenAktiv, ctx.hinweis, ctx.echtOffen, [...status],
+    zeigen.map(f => [f.instanz, f.id, f.kopf.stand, f.meine && f.meine.id]),
+    postErledigte(postStand, modus).map(f => [f.instanz, f.id, f.zustand, f.erledigt.antwort, f.erledigt.gesehen, f.meine && f.meine.id])]);
+  if (!erzwingen && signatur === postZeichnung) { $('#post-stand').textContent = ctx.zuletzt; return; }
+  postZeichnung = signatur;
+  zeichnePost($('#s-post'), ctx);
+}
+
+// Eine Antwort bauen (beglaubigt, nur für den Laptop dieser Instanz verschlüsselt) und in die Warteschlange legen.
+async function postAntworten(f, antwort) {
+  const key = schluesselVon(f.instanz, f.id);
+  if (!schluesselFuer(config, f.instanz)) { meldung(TEXTE.keinSchluessel[f.instanz], 6000); return false; }
+  const privatKey = await privaterSchluessel();
+  if (!privatKey) { meldung('Dieses Handy kann gerade nicht antworten (Schlüssel fehlt). Bitte Claude Bescheid geben.', 6000); return false; }
+  try {
+    const r = await antwortBauen({ frage: f, antwort, geraet, config, privatKey });
+    await nachrichten.speichere({
+      id: r.id, erstellt: Date.now(), status: 'wartet', ziel: r.instanz, art: 'antwort', frage: key,
+      vorschau: 'Antwort: ' + r.meine.text, sprache: 0, fotos: 0, doks: 0,
+      umschlag: new Blob([r.umschlag], { type: 'application/octet-stream' }),
+    });
+    const jetzt = postStand.fragen[key];                        // die Rückfrage kann sich unterdessen geändert haben (neue Fassung): dann gilt die Antwort nicht mehr dafür
+    if (jetzt && jetzt.kopf && jetzt.kopf.stand === f.kopf.stand) jetzt.meine = r.meine;
+    await postSpeichern(postStand);
+    postEntwuerfe.delete(key);
+    postAnzeigen();
+    await postausgang();
+    postZeichnen(true);
+    return true;
+  } catch (err) {
+    console.error(err);
+    meldung('Die Antwort ging nicht. Bitte nochmal versuchen.', 5000);
+    return false;
+  }
+}
 
 // ---------- Hilfen ----------
 function dauerText(s) { s = Math.round(s || 0); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
@@ -594,6 +706,9 @@ function startHinweis() {
 }
 
 // Für Tests
-window.hofApp = { postausgang, quittungenHolen, nachrichten, modus: () => modus, funktion: funktionAktiv, funktionenLaden, funktionen: () => ({ ...funktionen }) };
+window.hofApp = {
+  postausgang, quittungenHolen, nachrichten, modus: () => modus, funktion: funktionAktiv, funktionenLaden, funktionen: () => ({ ...funktionen }),
+  post: { holen: postHolen, stand: () => JSON.parse(JSON.stringify(postStand)), zeichnen: postZeichnen },
+};
 
 starten();

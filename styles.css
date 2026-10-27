@@ -198,3 +198,41 @@ button{cursor:pointer}
 /* Neue Funktionen (js/funktionen.js): ohne Freigabe unsichtbar – auch ohne JavaScript. Im Test-Modus sichtbar und gestrichelt orange, solange nicht für alle freigegeben. */
 [data-funktion]:not(.funktion-an){display:none !important}
 [data-funktion].nur-test{outline:2px dashed var(--test);outline-offset:3px;border-radius:6px}
+
+/* Post: Rückfragen vom Laptop */
+.post-karte{display:flex;align-items:center;gap:14px;margin:4px 16px 8px;padding:12px 16px;min-height:64px;background:var(--flaeche);border:1px solid var(--linie);border-radius:18px;text-align:left;width:calc(100% - 32px)}
+.post-icon{width:44px;height:44px;border-radius:12px;background:var(--gruen-hell);color:var(--gruen);display:flex;align-items:center;justify-content:center;flex:none}
+.post-icon svg{width:26px;height:26px}
+.post-text{flex:1;display:flex;flex-direction:column;min-width:0}
+.post-text b{font-size:19px}
+.post-zaehler{min-width:32px;height:32px;padding:0 9px;border-radius:16px;background:var(--warn-rahmen);color:#fff;font-weight:700;font-size:17px;display:flex;align-items:center;justify-content:center;flex:none}
+.ist-test .post-zaehler{background:var(--test);color:var(--test-dunkel)}
+.post-inhalt{padding:4px 16px 26px;display:flex;flex-direction:column;gap:10px}
+.post-inhalt .ueberschrift{padding-left:4px}
+.post-hinweis{overflow-wrap:anywhere;margin:0 0 4px;padding:10px 14px;border-radius:14px;background:var(--warn-grund);border:1px solid var(--warn-rahmen);color:var(--warn-text);font-size:15px;line-height:1.4}
+.post-hinweis.leise{background:#EEF2EE;border-color:var(--linie);color:var(--leise)}
+.zurueck-kopf h1{flex:1}
+.frage{background:var(--flaeche);border:1px solid var(--linie);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.frage.test{border-left:6px solid var(--test)}
+.frage-text{margin:0;font-size:19px;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere}
+.antwort-bereich{display:flex;flex-direction:column;gap:10px}
+.antworten{display:flex;flex-direction:column;gap:8px}
+.antwort-wahl{min-height:56px;border-radius:14px;border:2px solid var(--rahmen);background:#fff;font-size:19px;font-weight:700;padding:8px 14px;text-align:left;overflow-wrap:anywhere}
+.antwort-wahl[aria-pressed="true"]{border-color:var(--gruen);background:var(--gruen-hell);color:var(--gruen)}
+.ist-test .antwort-wahl[aria-pressed="true"]{border-color:var(--test);background:#FFF1DA;color:var(--test-dunkel)}
+.antwort-text{height:56px;border-radius:14px;border:2px solid var(--rahmen);padding:0 16px;font-size:20px;background:#F7F9F7;width:100%}
+.punkte{display:flex;flex-direction:column;gap:10px}
+.punkt-zeile{display:flex;flex-direction:column;gap:8px;padding:10px 0;border-top:1px solid var(--linie)}
+.punkt-zeile:first-child{border-top:0;padding-top:0}
+.punkt-text{display:flex;flex-direction:column;gap:2px;min-width:0;overflow-wrap:anywhere}
+.punkt-text b{font-size:18px}
+.dreier{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.dreier-wahl{min-height:52px;border-radius:12px;border:2px solid var(--rahmen);background:#fff;font-size:18px;font-weight:700}
+.dreier-wahl[aria-pressed="true"][data-e="ja"]{background:var(--gruen);border-color:var(--gruen);color:#fff}
+.dreier-wahl[aria-pressed="true"][data-e="nein"]{background:var(--rot);border-color:var(--rot);color:#fff}
+.dreier-wahl[aria-pressed="true"][data-e="spaeter"]{background:#E1E8E3;border-color:var(--leise);color:var(--text)}
+.zusammen{margin:0;text-align:center}
+.frage-gesendet{display:flex;flex-direction:column;gap:2px;background:var(--gruen-hell);border-radius:14px;padding:12px 14px}
+.frage-antwort{font-size:19px;font-weight:700;overflow-wrap:anywhere}
+.erledigt-eintrag .eintrag-text{-webkit-line-clamp:3}
+.ergebnis{font-size:15px;color:var(--leise);overflow-wrap:anywhere}

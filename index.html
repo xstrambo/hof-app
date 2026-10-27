@@ -71,6 +71,12 @@
     <button type="button" class="modus-wahl" id="m-echt" aria-pressed="true">Echt</button>
     <button type="button" class="modus-wahl" id="m-test" aria-pressed="false">Test</button>
   </div>
+  <!-- Post: Rückfragen vom Laptop (neue Funktion „rueckfragen“: erst im Test, dann für alle – siehe funktionen.json) -->
+  <button type="button" class="post-karte" id="b-post" data-funktion="rueckfragen" hidden>
+    <span class="post-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg></span>
+    <span class="post-text"><b>Post</b><span class="klein leise" id="post-untertitel">Keine offenen Fragen</span></span>
+    <span class="post-zaehler" id="post-zaehler" hidden>0</span>
+  </button>
   <div class="liste-bereich">
     <span class="ueberschrift">Zuletzt gesendet</span>
     <div class="liste" id="liste-start"></div>
@@ -189,6 +195,23 @@
     </div>
     <span class="ueberschrift">Dürfen senden</span>
     <div class="liste" id="mitglieder"></div>
+  </div>
+</section>
+
+<!-- Post: Rückfragen vom Laptop beantworten -->
+<section class="screen" id="s-post" data-funktion="rueckfragen" hidden>
+  <div class="zurueck-kopf">
+    <button type="button" class="knopf-icon" id="b-zurueck-post" aria-label="Zurück"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <h1>Post</h1>
+    <button type="button" class="knopf-icon" id="b-post-neu" aria-label="Aktualisieren"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg></button>
+  </div>
+  <div class="post-inhalt">
+    <div id="post-hinweise"></div>
+    <span class="ueberschrift">Offen</span>
+    <div class="liste" id="post-offen"></div>
+    <span class="ueberschrift" id="post-erledigt-kopf" hidden>Erledigt</span>
+    <div class="liste" id="post-erledigt"></div>
+    <p class="leise klein" id="post-stand"></p>
   </div>
 </section>
 
