@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1F6F3F">
+<title>Hof-App</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<main id="app">
+
+<!-- Erster Start: Einladung -->
+<section class="screen" id="s-zugang" hidden>
+  <div class="zugang-kopf">
+    <div class="logo gross" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 13h4l1.5 3h5L16 13h4v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M12 4v8m-3.5-3.5L12 12l3.5-3.5"/></svg></div>
+    <h1>Hof-App</h1>
+    <p class="leise">Infos für Hof Müller – einfach sprechen, fotografieren, senden.</p>
+  </div>
+  <form class="karte formular" id="f-zugang" novalidate>
+    <label for="hof-code">Einladungscode</label>
+    <input id="hof-code" name="code" type="text" autocomplete="one-time-code" autocapitalize="characters" placeholder="z. B. K7M-4Q2" class="code-feld" required>
+    <label for="hof-name">Dein Name</label>
+    <input id="hof-name" name="name" type="text" autocomplete="given-name" placeholder="z. B. Ralf" required>
+    <p class="fehler" id="zugang-fehler" role="alert" hidden></p>
+    <button type="submit" class="knopf haupt">Weiter</button>
+  </form>
+  <div class="hinweis-schloss">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+    <span>Den Code bekommst du von Niklas. Danach gibt er dein Handy einmal frei – vorher kann niemand etwas senden.</span>
+  </div>
+</section>
+
+<!-- Warten auf Freigabe -->
+<section class="screen" id="s-warten" hidden>
+  <div class="zugang-kopf">
+    <div class="logo gross" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+    <h1>Fast geschafft</h1>
+    <p class="leise">Niklas muss dein Handy noch freigeben. Dein Code:</p>
+    <p class="code-anzeige" id="warten-code"></p>
+    <p class="leise" id="warten-status">Wir schauen alle paar Sekunden nach.</p>
+  </div>
+</section>
+
+<!-- 1 Start -->
+<section class="screen" id="s-start" hidden>
+  <header class="kopf">
+    <div class="kopf-links">
+      <div class="logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 13h4l1.5 3h5L16 13h4v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M12 4v8m-3.5-3.5L12 12l3.5-3.5"/></svg></div>
+      <div class="kopf-name"><b>Hof-App</b><span class="nutzer-name"></span></div>
+    </div>
+    <div class="kopf-rechts">
+      <button type="button" class="knopf-icon nur-admin" id="b-freigaben" aria-label="Freigaben" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M17 8v6M14 11h6"/></svg>
+        <span class="punkt" id="freigaben-punkt" hidden></span>
+      </button>
+      <span class="netz" data-netz></span>
+    </div>
+  </header>
+  <div class="liste-bereich">
+    <span class="ueberschrift">Zuletzt gesendet</span>
+    <div class="liste" id="liste-start"></div>
+  </div>
+  <div class="mitte">
+    <div class="mic-ring">
+      <button type="button" class="mic-knopf" id="b-sprechen" aria-label="Aufnahme starten">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/><path d="M8.5 21h7"/></svg>
+      </button>
+    </div>
+    <div class="mitte-text">
+      <b>Tippen und sprechen</b>
+      <span class="leise" id="start-hinweis">Der Text erscheint, während du sprichst.</span>
+    </div>
+  </div>
+  <form class="leiste" id="f-schnell">
+    <button type="button" class="knopf-icon" id="b-anhang" aria-label="Anhang hinzufügen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+    <input type="text" id="schnell-text" aria-label="Nachricht schreiben" placeholder="Nachricht schreiben" enterkeyhint="send">
+    <button type="button" class="knopf-icon" id="b-kamera" aria-label="Kamera öffnen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg></button>
+  </form>
+</section>
+
+<!-- 2 Sprechen -->
+<section class="screen" id="s-aufnahme" hidden>
+  <header class="kopf">
+    <div class="kopf-links">
+      <div class="logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 13h4l1.5 3h5L16 13h4v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M12 4v8m-3.5-3.5L12 12l3.5-3.5"/></svg></div>
+      <div class="kopf-name"><b>Hof-App</b><span class="nutzer-name"></span></div>
+    </div>
+    <span class="netz rot"><span class="pulspunkt"></span>Aufnahme</span>
+  </header>
+  <div class="karte mitschrift">
+    <span class="ueberschrift">Wird mitgeschrieben</span>
+    <p id="live-text" aria-live="polite"><span id="live-fest"></span><span id="live-vorlaeufig" class="vorlaeufig"></span><span class="cursor"></span></p>
+  </div>
+  <div class="mitte">
+    <div class="pegel" id="pegel" aria-hidden="true"></div>
+    <span class="uhr" id="uhr">0:00</span>
+    <button type="button" class="stop-knopf" id="b-fertig" aria-label="Aufnahme beenden und Text prüfen"><span></span></button>
+    <b class="gross-text">Fertig – Text prüfen</b>
+  </div>
+  <div class="unten-mitte"><button type="button" class="knopf neben klein" id="b-abbrechen">Abbrechen</button></div>
+</section>
+
+<!-- 3 Prüfen -->
+<section class="screen" id="s-pruefen" hidden>
+  <div class="zurueck-kopf">
+    <button type="button" class="knopf-icon" id="b-zurueck-pruefen" aria-label="Zurück"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <b>Prüfen</b>
+  </div>
+  <div class="titel-block">
+    <h1>Stimmt das so?</h1>
+    <span class="leise">Tippe in den Text, um etwas zu ändern.</span>
+  </div>
+  <div class="text-block">
+    <label for="hof-text" class="ueberschrift">Dein Text</label>
+    <textarea id="hof-text" placeholder="Hier steht, was du gesagt hast."></textarea>
+  </div>
+  <div class="karte audio-zeile" id="audio-zeile" hidden>
+    <button type="button" class="play" id="b-play" aria-label="Aufnahme anhören"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
+    <span id="audio-label">Sprachaufnahme</span>
+    <button type="button" class="link-knopf" id="b-audio-weg">entfernen</button>
+  </div>
+  <div class="anhaenge" id="anhaenge">
+    <button type="button" class="anhang-plus" id="b-anhang-pruefen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>Anhang</span></button>
+  </div>
+  <div class="fuellung"></div>
+  <div class="knopf-stapel">
+    <button type="button" class="knopf neben" id="b-nochmal"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>Nochmal sprechen</button>
+    <button type="button" class="knopf haupt gross" id="b-senden"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 3L3 10.5l7 2.5 2.5 7z"/><path d="M21 3L10 13"/></svg>Senden</button>
+  </div>
+</section>
+
+<!-- 4 Gesendet -->
+<section class="screen" id="s-gesendet" hidden>
+  <header class="kopf">
+    <div class="kopf-links">
+      <div class="logo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 13h4l1.5 3h5L16 13h4v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M12 4v8m-3.5-3.5L12 12l3.5-3.5"/></svg></div>
+      <div class="kopf-name"><b>Hof-App</b><span class="nutzer-name"></span></div>
+    </div>
+    <span class="netz" data-netz></span>
+  </header>
+  <div class="erfolg">
+    <div class="erfolg-haken" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+    <div><b id="erfolg-titel">Gesendet</b><span id="erfolg-text">Holt der Laptop sie ab, erscheinen zwei Haken.</span></div>
+  </div>
+  <div class="liste-bereich">
+    <span class="ueberschrift">Heute</span>
+    <div class="liste" id="liste-gesendet"></div>
+  </div>
+  <div class="legende">
+    <div><span class="st st-wartet"></span><span><b>Wartet auf Netz</b> – bleibt im Handy, geht später raus</span></div>
+    <div><span class="st st-gesendet"></span><span><b>Gesendet</b> – liegt verschlüsselt im Briefkasten</span></div>
+    <div><span class="st st-abgeholt"></span><span><b>Im BetriebsBrain</b> – vom Laptop abgeholt</span></div>
+  </div>
+  <div class="fuellung"></div>
+  <div class="knopf-stapel"><button type="button" class="knopf haupt" id="b-neu"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>Neue Nachricht</button></div>
+</section>
+
+<!-- Freigaben (nur Niklas) -->
+<section class="screen" id="s-freigaben" hidden>
+  <div class="zurueck-kopf">
+    <button type="button" class="knopf-icon" id="b-zurueck-freigaben" aria-label="Zurück"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <h1>Freigaben</h1>
+  </div>
+  <div class="freigaben-inhalt">
+    <div id="wartende"></div>
+    <div class="karte formular">
+      <span class="ueberschrift">Neue Einladung</span>
+      <div class="einladung" id="einladung" hidden>
+        <div><b class="code-anzeige" id="einladung-code"></b><span class="leise klein">7 Tage gültig · nur einmal nutzbar</span></div>
+        <button type="button" class="knopf neben klein gruen" id="b-teilen">Teilen</button>
+      </div>
+      <button type="button" class="knopf haupt" id="b-code-neu">Neuen Code erstellen</button>
+    </div>
+    <span class="ueberschrift">Dürfen senden</span>
+    <div class="liste" id="mitglieder"></div>
+  </div>
+</section>
+
+<!-- Anhang-Blatt -->
+<div class="blatt-huelle" id="blatt" hidden>
+  <button type="button" class="blatt-hinter" id="b-blatt-zu" aria-label="Schließen"></button>
+  <div class="blatt" role="dialog" aria-modal="true" aria-labelledby="blatt-titel">
+    <span class="griff" aria-hidden="true"></span>
+    <b id="blatt-titel" class="blatt-titel">Hinzufügen</b>
+    <div class="blatt-raster">
+      <label class="blatt-wahl"><input type="file" accept="image/*" capture="environment" id="in-kamera" hidden><span class="rund"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg></span>Kamera</label>
+      <label class="blatt-wahl"><input type="file" accept="image/*" multiple id="in-fotos" hidden><span class="rund"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg></span>Fotos</label>
+      <label class="blatt-wahl"><input type="file" multiple id="in-dokument" hidden><span class="rund"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/></svg></span>Dokument</label>
+    </div>
+    <button type="button" class="knopf neben" id="b-blatt-abbrechen">Abbrechen</button>
+  </div>
+</div>
+
+<div class="meldung" id="meldung" role="status" hidden></div>
+</main>
+</body>
+</html>
