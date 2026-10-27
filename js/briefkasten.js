@@ -37,7 +37,7 @@ class Echt {
 
   anmelden(code, name, schluessel) { return this.rufe('anmelden', { code, name, schluessel }); }
   status(token) { return this.rufe('status', {}, token); }
-  senden(token, id, umschlag) { return this.rufe('senden', { id }, token, umschlag); }
+  senden(token, id, umschlag, ziel = 'echt') { return this.rufe('senden', { id, ziel }, token, umschlag); }
   quittungen(token, ids) { return this.rufe('quittungen', { ids }, token); }
   verwaltung(token) { return this.rufe('verwaltung', {}, token); }
   einladen(token) { return this.rufe('einladen', {}, token); }
@@ -91,13 +91,13 @@ class Attrappe {
     const g = this.geraet(this.zustand(), token);
     return { status: g.status, rolle: g.rolle, name: g.name };
   }
-  async senden(token, id, umschlag) {
+  async senden(token, id, umschlag, ziel = 'echt') {
     await this.warte();
     const z = this.zustand();
     const g = this.geraet(z, token);
     if (g.status !== 'frei') throw new BriefkastenFehler('nicht_frei', 'Noch nicht freigegeben');
     const roh = new Uint8Array(await new Blob([umschlag]).arrayBuffer());
-    if (!z.sendungen[id]) z.sendungen[id] = { von: g.id, groesse: roh.length, abgeholt: false, umschlag: bytesZuB64(roh), zeit: Date.now() };
+    if (!z.sendungen[id]) z.sendungen[id] = { von: g.id, groesse: roh.length, abgeholt: false, umschlag: bytesZuB64(roh), zeit: Date.now(), ziel };
     this.schreib(z);
     return { ok: true };
   }

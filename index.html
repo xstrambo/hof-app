@@ -14,6 +14,12 @@
 <body>
 <main id="app">
 
+<!-- Echt | Test: im Test-Modus steht dieses Band über jedem Bildschirm -->
+<div class="test-banner" id="test-banner" role="status" hidden>
+  <span class="test-banner-text">TEST – nur ausgedachte Daten</span>
+  <button type="button" class="test-banner-knopf" id="b-zu-echt">Zu Echt wechseln</button>
+</div>
+
 <!-- Erster Start: Einladung -->
 <section class="screen" id="s-zugang" hidden>
   <div class="zugang-kopf">
@@ -61,6 +67,10 @@
       <span class="netz" data-netz></span>
     </div>
   </header>
+  <div class="modus" id="modus-schalter" role="group" aria-label="Wohin senden?" hidden>
+    <button type="button" class="modus-wahl" id="m-echt" aria-pressed="true">Echt</button>
+    <button type="button" class="modus-wahl" id="m-test" aria-pressed="false">Test</button>
+  </div>
   <div class="liste-bereich">
     <span class="ueberschrift">Zuletzt gesendet</span>
     <div class="liste" id="liste-start"></div>
@@ -131,7 +141,7 @@
   <div class="fuellung"></div>
   <div class="knopf-stapel">
     <button type="button" class="knopf neben" id="b-nochmal"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>Nochmal sprechen</button>
-    <button type="button" class="knopf haupt gross" id="b-senden"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 3L3 10.5l7 2.5 2.5 7z"/><path d="M21 3L10 13"/></svg>Senden</button>
+    <button type="button" class="knopf haupt gross" id="b-senden"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 3L3 10.5l7 2.5 2.5 7z"/><path d="M21 3L10 13"/></svg><span id="senden-text">Senden</span></button>
   </div>
 </section>
 

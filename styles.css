@@ -6,6 +6,7 @@
   --grund:#F2F4F1; --flaeche:#FFFFFF; --text:#16211B; --leise:#4D5B53; --linie:#D5DCD6; --rahmen:#C9D2CB;
   --gruen:#1F6F3F; --gruen-hell:#E3EFE6; --gruen-ring:#DDEBE1; --rot:#B42318; --orange:#8A4B00;
   --warn-grund:#FFF4E5; --warn-rahmen:#C77A1A; --warn-text:#7A4700; --platz:#DCE5DE;
+  --test:#F28C00; --test-dunkel:#1A1200;
   color-scheme:light;
 }
 *{box-sizing:border-box}
@@ -181,3 +182,19 @@ button{cursor:pointer}
 
 .meldung{position:fixed;left:50%;bottom:calc(110px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--text);color:#fff;padding:12px 18px;border-radius:14px;font-size:16px;max-width:calc(100% - 32px);z-index:20;text-align:center}
 .code-feld::placeholder{text-transform:none;letter-spacing:normal;font-weight:400}
+
+/* Echt | Test: orange heißt TEST – nur ausgedachte Daten */
+.test-banner{position:sticky;top:0;z-index:30;display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:52px;padding:8px 14px;padding-top:calc(8px + env(safe-area-inset-top));background:var(--test);color:var(--test-dunkel);font-size:16px;font-weight:700;line-height:1.25}
+.test-banner-text{letter-spacing:.02em}
+.test-banner-knopf{flex:none;min-height:36px;padding:0 12px;border:2px solid var(--test-dunkel);border-radius:999px;background:transparent;color:var(--test-dunkel);font-size:14px;font-weight:700;white-space:nowrap}
+.ist-test .screen{padding-top:0;min-height:calc(100dvh - 52px)}
+.modus{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:4px 16px 8px;padding:5px;background:#E1E8E3;border-radius:18px}
+.modus-wahl{min-height:52px;border:0;border-radius:14px;background:transparent;color:var(--leise);font-size:19px;font-weight:700}
+.modus-wahl[aria-pressed="true"]{background:var(--gruen);color:#fff}
+.modus-wahl#m-test[aria-pressed="true"]{background:var(--test);color:var(--test-dunkel)}
+.knopf.haupt.test{background:var(--test);border-color:var(--test);color:var(--test-dunkel)}
+.chip.test{background:var(--test);color:var(--test-dunkel);font-weight:700}
+
+/* Neue Funktionen (js/funktionen.js): ohne Freigabe unsichtbar – auch ohne JavaScript. Im Test-Modus sichtbar und gestrichelt orange, solange nicht für alle freigegeben. */
+[data-funktion]:not(.funktion-an){display:none !important}
+[data-funktion].nur-test{outline:2px dashed var(--test);outline-offset:3px;border-radius:6px}

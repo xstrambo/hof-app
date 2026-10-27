@@ -3,20 +3,25 @@ import { einstellung, nachrichten, aufraeumen } from './js/speicher.js';
 import { briefkastenFuer, normCode, BriefkastenFehler } from './js/briefkasten.js';
 import { packen, verschluesseln, fotoVerkleinern } from './js/paket.js';
 import { Aufnahme, liveTextMoeglich } from './js/sprache.js';
+import { ECHT, TEST, lesModus, schreibModus, wirksamerModus, testErlaubt, schluesselFuer, zielVon, testBlockiert, TEXTE } from './js/modus.js';
+import { ladeFunktionen, sichtbar as funktionSichtbar, anwenden as funktionenAnwenden } from './js/funktionen.js';
 
 // ---------- Einstellungen ----------
-const config = { live_text: 'handy', ...grundConfig };
+const config = { live_text: 'handy', testSchluessel: '', testRollen: ['admin'], ...grundConfig };
 const lokal = ['localhost', '127.0.0.1'].includes(location.hostname);
 const q = new URLSearchParams(location.search);
 if (lokal && q.has('attrappe')) {
   config.attrappe = true;
   if (q.get('schluessel')) config.laptopSchluessel = q.get('schluessel');
+  if (q.get('testschluessel')) config.testSchluessel = q.get('testschluessel');
 }
 const kasten = briefkastenFuer(config);
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
 let geraet = null;          // {token, id, rolle, status, name}
+let modus = ECHT;           // Echt | Test: wohin die nächste Nachricht geht (siehe js/modus.js)
+let funktionen = {};        // neue Funktionen: { name: 'test' | 'alle' } aus funktionen.json (siehe js/funktionen.js); leer = alles Neue nur im Test
 let entwurf = neuerEntwurf();
 let aufnahme = null;
 const HINWEIS_KEIN_LIVETEXT = 'Live-Text auf diesem Handy nicht verfügbar – die Aufnahme wird später abgeschrieben.';
@@ -42,6 +47,8 @@ function entwurfMerken(sofort) {
 
 // ---------- Bildschirme ----------
 function zeige(id, { verlauf = true } = {}) {
+  const ziel = document.getElementById(id);
+  if (ziel?.dataset.funktion && !funktionAktiv(ziel.dataset.funktion)) id = 's-start';   // Bildschirm einer noch nicht freigegebenen Funktion: nie zeigen
   if (aktuell === 's-aufnahme' && id !== 's-aufnahme' && aufnahme) { aufnahme.abbrechen(); aufnahme = null; }
   $$('.screen').forEach(s => { s.hidden = s.id !== id; });
   aktuell = id;
@@ -80,6 +87,8 @@ async function starten() {
   if ('serviceWorker' in navigator && !config.attrappe) navigator.serviceWorker.register('sw.js').catch(() => {});
   netzAnzeigen();
   geraet = await einstellung.hole('geraet');
+  modusSetzen(lesModus(), { merken: false });
+  funktionenLaden();
   const gespeichert = await einstellung.hole('entwurf');
   if (gespeichert) entwurf = { ...neuerEntwurf(), ...gespeichert };
   // Alte Fassungen haben hier gemerkt "Live-Text geht auf diesem Handy nicht" und ihn für immer abgeschaltet.
@@ -109,6 +118,7 @@ $('#f-zugang').addEventListener('submit', async e => {
     const r = await kasten.anmelden(code, name, oeff);
     geraet = { token: r.token, id: r.geraet, rolle: r.rolle, status: r.status, name, code };
     await einstellung.setze('geraet', geraet);
+    modusSetzen(lesModus(), { merken: false });
     setzeName();
     if (geraet.status === 'frei') { history.replaceState({ s: 's-start' }, ''); zeige('s-start', { verlauf: false }); hintergrund(); }
     else wartenAuf();
@@ -143,6 +153,7 @@ function wartenAuf() {
       if (r.status === 'frei') {
         geraet = { ...geraet, status: 'frei', rolle: r.rolle };
         await einstellung.setze('geraet', geraet);
+        modusSetzen(lesModus(), { merken: false });
         clearInterval(wartenTimer);
         history.replaceState({ s: 's-start' }, '');
         zeige('s-start', { verlauf: false }); hintergrund();
@@ -336,7 +347,9 @@ $('#f-schnell').addEventListener('submit', e => {
 $('#b-senden').addEventListener('click', async () => {
   entwurf.text = $('#hof-text').value.trim();
   if (!entwurf.text && !entwurf.audio && !entwurf.anhaenge.length) { meldung('Es gibt noch nichts zu senden.'); return; }
-  if (!config.laptopSchluessel) { meldung('Die App ist noch nicht fertig eingerichtet (Laptop-Schlüssel fehlt).', 6000); return; }
+  const ziel = modus;                                   // das Ziel gilt ab hier für diese Nachricht – auch wenn später umgeschaltet wird
+  const schluessel = schluesselFuer(config, ziel);      // der Schlüssel DIESES Ziels; fehlt er, geht nichts raus (nie der andere Schlüssel)
+  if (!schluessel) { meldung(TEXTE.keinSchluessel[ziel], 6000); return; }
   const knopf = $('#b-senden'); knopf.disabled = true;
   try {
     const id = crypto.randomUUID();
@@ -347,12 +360,12 @@ $('#b-senden').addEventListener('click', async () => {
       const art = f.type.startsWith('image/') ? 'foto' : f.type.startsWith('audio/') ? 'sprache' : 'dokument';
       dateien.push({ name: f.name, typ: f.type || 'application/octet-stream', art, daten: new Uint8Array(await f.arrayBuffer()) });
     }
-    const klar = await packen({ id, von: geraet.name, geraet: geraet.id, erstellt: new Date(erstellt).toISOString(), text: entwurf.text, sprachDauer: entwurf.audioDauer || 0 }, dateien);
-    const umschlag = await verschluesseln(klar, config.laptopSchluessel);
+    const klar = await packen({ id, von: geraet.name, geraet: geraet.id, erstellt: new Date(erstellt).toISOString(), text: entwurf.text, sprachDauer: entwurf.audioDauer || 0, ziel }, dateien);
+    const umschlag = await verschluesseln(klar, schluessel);
     const fotos = dateien.filter(d => d.art === 'foto').length;
     const doks = dateien.filter(d => d.art === 'dokument').length;
     await nachrichten.speichere({
-      id, erstellt, status: 'wartet',
+      id, erstellt, status: 'wartet', ziel,
       vorschau: entwurf.text || (fotos ? 'Foto' : doks ? 'Dokument' : 'Sprachnachricht'),
       sprache: entwurf.audioDauer || 0, fotos, doks,
       umschlag: new Blob([umschlag], { type: 'application/octet-stream' }),
@@ -361,7 +374,7 @@ $('#b-senden').addEventListener('click', async () => {
     clearTimeout(entwurfTimer);
     await einstellung.loesche('entwurf');
     $('#erfolg-titel').textContent = 'Wird gesendet …';
-    $('#erfolg-text').textContent = 'Holt der Laptop sie ab, erscheinen zwei Haken.';
+    $('#erfolg-text').textContent = ziel === TEST ? TEXTE.gesendetTest : 'Holt der Laptop sie ab, erscheinen zwei Haken.';
     $('.erfolg').classList.remove('offline');
     history.replaceState({ s: 's-gesendet' }, '');
     zeige('s-gesendet', { verlauf: false });
@@ -382,17 +395,24 @@ $('#b-senden').addEventListener('click', async () => {
 $('#b-neu').addEventListener('click', () => { history.replaceState({ s: 's-start' }, ''); zeige('s-start', { verlauf: false }); });
 
 let sendetGerade = false;
+let testHinweisGezeigt = false;
 async function postausgang() {
   if (sendetGerade || !geraet || geraet.status !== 'frei') return;
   sendetGerade = true;
   try {
     const offen = (await nachrichten.alle()).filter(n => n.status === 'wartet').reverse();
     for (const n of offen) {
+      const ziel = zielVon(n);                // jede Nachricht geht an das Ziel, für das sie verschlüsselt wurde
       try {
-        await kasten.senden(geraet.token, n.id, n.umschlag);
+        await kasten.senden(geraet.token, n.id, n.umschlag, ziel);
         await nachrichten.aendere(n.id, { status: 'gesendet', umschlag: null, gesendet: Date.now() });
       } catch (err) {
-        if (err instanceof BriefkastenFehler && (err.code === 'nicht_frei' || err.code === 'unbekannt')) {
+        const code = err instanceof BriefkastenFehler ? err.code : '';
+        if (testBlockiert(ziel, code)) {      // der Test ist (noch) nicht bereit: nur diese Test-Nachricht bleibt liegen, die anderen gehen weiter
+          if (!testHinweisGezeigt) { testHinweisGezeigt = true; meldung(TEXTE.testNichtBereit, 6000); }
+          continue;
+        }
+        if (code === 'nicht_frei' || code === 'unbekannt') {
           meldung('Dieses Handy darf gerade nicht senden. Sprich mit Niklas.', 6000);
         }
         break; // später nochmal
@@ -447,6 +467,7 @@ function fuelle(box, liste) {
     const e = document.createElement('div'); e.className = 'eintrag'; e.dataset.id = n.id; e.dataset.status = n.status;
     const t = document.createElement('span'); t.className = 'eintrag-text'; t.textContent = n.vorschau; e.appendChild(t);
     const fuss = document.createElement('div'); fuss.className = 'eintrag-fuss';
+    if (zielVon(n) === TEST) { const c = chip('Test'); c.classList.add('test'); fuss.appendChild(c); }
     if (n.sprache) fuss.appendChild(chip('Sprache ' + dauerText(n.sprache)));
     if (n.fotos) fuss.appendChild(chip(n.fotos === 1 ? '1 Foto' : n.fotos + ' Fotos'));
     if (n.doks) fuss.appendChild(chip(n.doks === 1 ? '1 Dokument' : n.doks + ' Dokumente'));
@@ -516,6 +537,49 @@ $('#b-teilen').addEventListener('click', async () => {
   else { try { await navigator.clipboard.writeText(text); meldung('Kopiert – jetzt z. B. in WhatsApp einfügen.'); } catch { meldung(code); } }
 });
 
+// ---------- Echt | Test ----------
+// Der Schalter steht auf dem Startbildschirm (nur für Geräte, die ihn sehen dürfen); im Test-Modus liegt ein oranges Band über jedem
+// Bildschirm, und der Sendeknopf ist orange. Der Modus bleibt auf diesem Gerät gemerkt (Standard: Echt).
+function modusSetzen(neu, { merken = true } = {}) {
+  modus = wirksamerModus(neu, config, geraet);
+  if (merken && testErlaubt(config, geraet)) schreibModus(modus);
+  modusAnzeigen();
+}
+function modusAnzeigen() {
+  const test = modus === TEST;
+  document.body.classList.toggle('ist-test', test);
+  $('#test-banner').hidden = !test;
+  $('#modus-schalter').hidden = !testErlaubt(config, geraet);
+  $('#m-echt').setAttribute('aria-pressed', String(!test));
+  $('#m-test').setAttribute('aria-pressed', String(test));
+  $('#b-senden').classList.toggle('test', test);
+  $('#senden-text').textContent = test ? TEXTE.sendenTest : TEXTE.senden;
+  document.title = test ? 'Hof-App (TEST)' : 'Hof-App';
+  funktionenAnzeigen();
+}
+$('#m-echt').addEventListener('click', () => modusSetzen(ECHT));
+$('#m-test').addEventListener('click', () => {
+  modusSetzen(TEST);
+  if (modus === TEST && !schluesselFuer(config, TEST)) meldung(TEXTE.keinSchluessel.test, 6000);
+});
+$('#b-zu-echt').addEventListener('click', () => modusSetzen(ECHT));
+
+// ---------- Neue Funktionen (erst nur im Test) ----------
+// funktionen.json sagt je Funktion "test" oder "alle" (js/funktionen.js). Wer die Datei nicht holen kann, behält den bisherigen Stand;
+// ohne Stand gilt überall "test": im echten Betrieb erscheint dann nichts Neues.
+function funktionAktiv(name) { return funktionSichtbar(funktionen, name, modus); }
+function funktionenAnzeigen() { funktionenAnwenden(document, funktionen, modus); }
+let funktionenGeladen = 0;
+async function funktionenLaden() {
+  funktionenGeladen = Date.now();
+  const neu = await ladeFunktionen();
+  if (neu) { funktionen = neu; funktionenAnzeigen(); }
+}
+// Wer die App lange offen hat, bekommt eine neue Freigabe spätestens nach 10 Minuten (beim Zurückkehren in die App).
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && Date.now() - funktionenGeladen > 10 * 60 * 1000) funktionenLaden();
+});
+
 // ---------- Hilfen ----------
 function dauerText(s) { s = Math.round(s || 0); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
 function zeitText(ms) {
@@ -530,6 +594,6 @@ function startHinweis() {
 }
 
 // Für Tests
-window.hofApp = { postausgang, quittungenHolen, nachrichten };
+window.hofApp = { postausgang, quittungenHolen, nachrichten, modus: () => modus, funktion: funktionAktiv, funktionenLaden, funktionen: () => ({ ...funktionen }) };
 
 starten();
