@@ -28,9 +28,10 @@ button{cursor:pointer}
 
 /* Kopf */
 .kopf{display:flex;align-items:center;justify-content:space-between;padding:22px 20px 12px}
-.kopf-links{display:flex;align-items:center;gap:12px}
-.kopf-rechts{display:flex;align-items:center;gap:10px}
-.kopf-name{display:flex;flex-direction:column}
+.kopf-links{display:flex;align-items:center;gap:12px;min-width:0}
+.kopf-rechts{display:flex;align-items:center;gap:10px;flex:none}
+.kopf-name{display:flex;flex-direction:column;min-width:0}
+.kopf-name b,.kopf-name span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kopf-name b{font-size:21px;line-height:1.2}
 .kopf-name span{font-size:15px;color:var(--leise)}
 .logo{width:44px;height:44px;border-radius:12px;background:var(--gruen);display:flex;align-items:center;justify-content:center;color:#fff}
@@ -81,38 +82,59 @@ button{cursor:pointer}
 /* Startbildschirm: Das Mikrofon sitzt immer am selben Platz – ganz unten, direkt über der Eingabeleiste –, egal wie viele oder wie lange die Nachrichten im Verlauf sind.
    Der Verlauf füllt nur den Platz darüber. Reicht der nicht, erscheinen weniger Einträge (was nicht ganz hineinpasst, wird weggelassen, nicht angeschnitten);
    nie wandert das Mikrofon. Ist der Bildschirm kurz, entfällt zuerst die Zeile zum anderen Modus, dann der ganze Verlauf, erst dann schrumpft das Mikrofon. */
-#s-start{height:100dvh;min-height:0}                              /* feste Höhe: nur so kann etwas schrumpfen, statt dass der Bildschirm länger wird */
-.ist-test #s-start{height:calc(100dvh - var(--band,56px))}
+#s-start{--platz:100dvh;height:var(--platz);min-height:0}         /* feste Höhe: nur so kann etwas schrumpfen, statt dass der Bildschirm länger wird */
+.ist-test #s-start{--platz:calc(100dvh - var(--band,56px))}
 #s-start .liste-bereich{flex:1 1 0;min-height:0;overflow:hidden;container-type:size;padding-bottom:6px}
 #s-start .verlauf{flex:1 1 0;min-height:0;overflow:hidden;flex-flow:column wrap;align-content:flex-start;gap:8px 32px}   /* was nicht in die Spalte passt, rutscht in eine zweite, die außerhalb liegt */
 #s-start .verlauf>*{width:100%;flex:none}
 @container (max-height:71px){#s-start .liste-bereich>*{display:none}}                                  /* kein Platz für Überschrift und einen Eintrag: nichts anzeigen statt Reste */
 @container (max-height:97px){#s-start .liste-bereich.mit-hinweis>.verlauf-hinweis{display:none}}        /* mit der Zeile zum anderen Modus braucht es 26 Pixel mehr: reicht der Platz nicht, entfällt zuerst nur sie */
+@container (max-height:150px){#s-start .liste-bereich.mit-hinweis:has(.verlauf .eintrag+.eintrag)>.verlauf-hinweis{display:none}}   /* gibt es zwei Einträge, soll der zweite nicht wegen dieser Zeile fehlen: sie steht nur, wenn für Überschrift, Zeile und zwei Einträge Platz ist */
+@container (max-height:112px){#s-start .eintrag-quittung{-webkit-line-clamp:1}}                       /* wenig Platz: die Quittung nur eine Zeile hoch (endet dann mit „…“), damit der neueste Eintrag samt Quittung noch hineinpasst */
+@container (max-height:91px){#s-start .liste-bereich:has(.verlauf>.eintrag:first-child.mit-quittung)>.ueberschrift{display:none}}   /* noch weniger: die Überschrift entfällt, der neueste Eintrag mit seiner Quittung geht vor */
 #s-start .mitte{display:contents}                                 /* Mikrofon und Text sind selbst Teile der Spalte: so schrumpft nur das Mikrofon, wenn der Platz knapp wird */
 #s-start .mic-ring{margin:8px 0 10px}
 #s-start .mitte-text{flex:none;padding-bottom:14px}
 #s-start .mitte-text span{min-height:2.8em}                       /* Platz für zwei Zeilen, damit der Hinweis das Mikrofon nicht verschiebt */
+/* Die Größe des Mikrofons hängt nur von der Höhe des Handys ab (und vom orangen Band) – nie davon, was im Verlauf steht oder ob Post wartet: So rutscht es nie.
+   Es wird so groß wie möglich (höchstens 212 Pixel), lässt aber über sich Platz für Überschrift und zwei Einträge des Verlaufs (--ruhe).
+   --fest: alles andere auf dem Bildschirm (Kopf, Abstände, Text unter dem Mikrofon, Eingabeleiste); --schalter: die Zeile Echt | Test (nur, wo es sie gibt). */
+#s-start{--ruhe:143px;--fest:292px;--schalter:0px;--mikro-min:104px}
+body.mit-schalter #s-start{--schalter:74px}
+#s-start .mic-ring{flex:0 1 auto;max-height:none;height:clamp(var(--mikro-min), calc(var(--platz) - var(--fest) - var(--schalter) - var(--ruhe) - env(safe-area-inset-top) - env(safe-area-inset-bottom)), 212px)}
+@media (max-width:399px){                                         /* schmale Handys: im Kopf stehen jetzt Post-Zeichen, Personen-Symbol und „Online“ – alles etwas enger, damit der Name Platz hat */
+  #s-start .kopf{padding-left:16px;padding-right:12px}
+  #s-start .kopf-rechts{gap:2px}
+  #s-start .kopf-rechts .knopf-icon{width:44px;height:44px}
+}
+@media (max-width:339px){#s-start .kopf-links .logo{display:none}}   /* ganz schmale (320 Pixel): das Zeichen entfällt, der Name bleibt */
 @media (max-height:800px){                                        /* kürzere Handys: Kopf, Schalter und Post etwas enger, damit mehr für Verlauf und Mikrofon bleibt */
+  #s-start{--fest:276px}
+  body.mit-schalter #s-start{--schalter:60px}
   #s-start .kopf{padding:12px 20px 6px}
   #s-start .modus{margin:0 16px 6px}
   #s-start .modus-wahl{min-height:44px}
-  #s-start .post-karte{margin:0 16px 6px;min-height:56px;padding:8px 16px}
 }
-@media (max-height:620px){                                        /* sehr kurze Handys (ältere iPhones, 320 × 568): Mikrofon darf etwas kleiner werden, Abstände enger */
+@media (max-height:620px){                                        /* sehr kurze Handys (ältere iPhones, 320 × 568): Mikrofon darf etwas kleiner werden, Abstände enger, der Hinweis unter dem Mikrofon entfällt */
+  #s-start{--fest:203px;--mikro-min:88px}
   #s-start .mic-ring{margin:4px 0 6px;min-height:88px}
   #s-start .mitte-text{padding-bottom:6px}
   #s-start .mitte-text b{font-size:22px}
-  #s-start .mitte-text span{min-height:0}
+  #s-start .mitte-text span{display:none}
 }
 @media (max-height:540px){                                        /* Querformat und winzige Fenster: nicht mehr in die Höhe zwingen, der Bildschirm darf scrollen (die Eingabeleiste bleibt unten stehen) */
   #s-start{height:auto;min-height:100dvh}
   .ist-test #s-start{height:auto;min-height:calc(100dvh - var(--band,56px))}
+  #s-start .mic-ring{height:104px}
 }
 
 /* Verlauf (Zuletzt gesendet / Heute): jeder Eintrag eine Zeile, Text mit „…“ am Ende */
 .verlauf-hinweis{margin:-2px 0 0;padding-left:4px;font-size:14px;line-height:1.3;color:var(--leise)}
 .verlauf .eintrag{flex-direction:row;align-items:center;gap:8px;padding:10px 12px;min-height:46px;border-radius:14px}
 .verlauf .eintrag.test{border-left:6px solid var(--test);padding-left:8px}
+.verlauf .eintrag.mit-quittung{flex-wrap:wrap;row-gap:3px}                                                   /* die Quittung steht in einer eigenen Zeile unter der Nachricht, im selben Kasten */
+.eintrag-quittung{flex:0 0 100%;min-width:0;font-size:14px;line-height:1.3;color:var(--leise);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
+.eintrag-quittung::before{content:"\2713\00a0";color:var(--gruen);font-weight:700}                                          /* der Haken: es ist angekommen */
 .verlauf .eintrag-text{flex:1 1 0;min-width:0;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .verlauf .zeit{margin-left:0;flex:none;white-space:nowrap}
 .mini{display:inline-flex;align-items:center;gap:2px;flex:none;font-size:13px;color:var(--leise)}
@@ -249,12 +271,13 @@ button{cursor:pointer}
 [data-funktion].nur-test{outline:2px dashed var(--test);outline-offset:3px;border-radius:6px}
 
 /* Post: Rückfragen vom Laptop */
-.post-karte{display:flex;align-items:center;gap:14px;margin:4px 16px 8px;padding:12px 16px;min-height:64px;background:var(--flaeche);border:1px solid var(--linie);border-radius:18px;text-align:left;width:calc(100% - 32px)}
-.post-icon{width:44px;height:44px;border-radius:12px;background:var(--gruen-hell);color:var(--gruen);display:flex;align-items:center;justify-content:center;flex:none}
-.post-icon svg{width:26px;height:26px}
+.post-karte{display:flex;align-items:center;gap:12px;margin:0 16px 6px;padding:4px 14px;min-height:46px;background:var(--flaeche);border:1px solid var(--linie);border-radius:16px;text-align:left;width:calc(100% - 32px);flex:none}   /* schlank: sie steht nur da, wenn etwas auf dich wartet */
+.post-icon{width:36px;height:36px;border-radius:10px;background:var(--gruen-hell);color:var(--gruen);display:flex;align-items:center;justify-content:center;flex:none}
+.post-icon svg{width:22px;height:22px}
 .post-text{flex:1;display:flex;flex-direction:column;min-width:0}
-.post-text b{font-size:19px}
-.post-zaehler{min-width:32px;height:32px;padding:0 9px;border-radius:16px;background:var(--warn-rahmen);color:#fff;font-weight:700;font-size:17px;display:flex;align-items:center;justify-content:center;flex:none}
+.post-text b{font-size:17px;line-height:1.2}
+.post-text .klein{font-size:13.5px;line-height:1.25}
+.post-zaehler{min-width:28px;height:28px;padding:0 8px;border-radius:14px;background:var(--warn-rahmen);color:#fff;font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center;flex:none}
 .ist-test .post-zaehler{background:var(--test);color:var(--test-dunkel)}
 .post-inhalt{padding:4px 16px 26px;display:flex;flex-direction:column;gap:10px}
 .post-inhalt .ueberschrift{padding-left:4px}

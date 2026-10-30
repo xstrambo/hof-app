@@ -1,4 +1,4 @@
-// Post vom Laptop: Rückfragen, „erledigt“-Hinweise und „Für dich“ (Dokumente, Ergebnisse, Hinweise) holen, prüfen, ablegen – und Antworten bauen.
+// Post vom Laptop: Rückfragen, „erledigt“-Hinweise, „Für dich“ (Dokumente, Ergebnisse, Hinweise) und Quittungen holen, prüfen, ablegen – und Antworten bauen.
 // Alles hier ist Logik ohne Oberfläche, damit sie sich einzeln prüfen lässt (Speicher und Briefkasten kommen von außen).
 //
 // Ablauf
@@ -28,13 +28,15 @@ const ERLEDIGT_TAGE = 14;       // Erledigtes bleibt so lange in der Liste
 const ITEMS_TAGE = 30;          // so lange merkt sich das Handy, welche Umschläge es schon verarbeitet hat
 const DINGE_TAGE = 30;          // „Für dich“ bleibt so lange auf dem Handy (oder bis „Erledigt“ getippt wird)
 const MAX_DINGE = 100;
+const QUITTUNGEN_TAGE = 30;     // eine Quittung bleibt so lange, wie die gesendete Nachricht im Verlauf steht
+const MAX_QUITTUNGEN = 300;
 export const MAX_PDF = 10 * 1024 * 1024;     // größer als 10 MB bekommt das Handy nicht (der Laptop schickt dann nur den Hinweis)
 export const DING_ARTEN = ['dokument', 'ergebnis', 'hinweis'];
 
 export const schluesselVon = (instanz, id) => `${normModus(instanz)}:${id}`;
 
 // ---- Zustand (liegt im Handy, IndexedDB „einstellungen“) --------------------------------------------------------------------
-export function neuerStand() { return { v: 1, fragen: {}, items: {}, dinge: {} }; }
+export function neuerStand() { return { v: 1, fragen: {}, items: {}, dinge: {}, quittungen: {} }; }
 
 const text = (x, n) => (typeof x === 'string' ? x.replace(/\s+/g, ' ').trim().slice(0, n) : '');
 const textMitZeilen = (x, n) => (typeof x === 'string' ? x.replace(/\r/g, '').split('\n').map(z => z.replace(/[ \t]+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, n) : '');
@@ -91,6 +93,25 @@ export function dingKopf(k) {
   };
 }
 
+// Quittung zu einer Nachricht, die dieses Handy gesendet hat („Angekommen · gebucht: …“). Sie ist keine Karte in der Post, sondern steht im Verlauf
+// unter der gesendeten Nachricht (bezug = Kennung der Nachricht). Je Nachricht gilt die neueste Fassung (erst nach `gesendet`, bei gleicher Zeit nach `fassung`).
+export function quittungKopf(k) {
+  if (!istObjekt(k) || k.art !== 'fuer_dich' || k.ding !== 'quittung') return null;
+  const id = typeof k.id === 'string' ? k.id : '';
+  const bezug = typeof k.bezug === 'string' ? k.bezug : '';
+  const satz = text(k.text, 200);
+  if (!ID_OK.test(id) || !UUID.test(bezug) || !satz) return null;
+  return { id, bezug, text: satz, fassung: Number.isInteger(k.fassung) && k.fassung >= 0 && k.fassung < 1e9 ? k.fassung : 0, erstellt: text(k.erstellt, 40), gesendet: zeitText(k.gesendet) };
+}
+const quittungAelter = (neu, alt) => spaeterAls(alt.gesendet, neu.gesendet) || (!spaeterAls(neu.gesendet, alt.gesendet) && neu.fassung < alt.fassung);
+
+function normQuittung(key, q) {
+  if (!istObjekt(q) || (q.instanz !== ECHT && q.instanz !== TEST)) return null;
+  const kopf = quittungKopf({ ...q.kopf, art: 'fuer_dich', ding: 'quittung' });
+  if (!kopf || key !== schluesselVon(q.instanz, kopf.bezug)) return null;
+  return { instanz: q.instanz, bezug: kopf.bezug, kopf, gesehen: Number.isFinite(q.gesehen) ? q.gesehen : Date.now() };
+}
+
 function normDing(key, d) {
   if (!istObjekt(d) || (d.instanz !== ECHT && d.instanz !== TEST)) return null;
   const kopf = dingKopf({ ...d.kopf, art: 'fuer_dich' });
@@ -132,6 +153,12 @@ export function normStand(roh) {
       if (g && Object.keys(aus.dinge).length < MAX_DINGE) aus.dinge[k] = g;
     }
   }
+  if (istObjekt(roh.quittungen)) {
+    for (const [k, q] of Object.entries(roh.quittungen)) {
+      const g = normQuittung(k, q);
+      if (g && Object.keys(aus.quittungen).length < MAX_QUITTUNGEN) aus.quittungen[k] = g;
+    }
+  }
   return aus;
 }
 
@@ -141,7 +168,7 @@ export function spaeterAls(a, b) {
 }
 
 // ---- Eine Nachricht des Laptops in den Zustand einarbeiten -------------------------------------------------------------------
-// Gibt zurück: 'neu' | 'geaendert' | 'gleich' | 'erledigt' | 'vermerkt' (Hinweis zu einer unbekannten Rückfrage) | 'ding' („Für dich“) | 'alt' | 'ungueltig'
+// Gibt zurück: 'neu' | 'geaendert' | 'gleich' | 'erledigt' | 'vermerkt' (Hinweis zu einer unbekannten Rückfrage) | 'ding' („Für dich“) | 'quittung' | 'alt' | 'ungueltig'
 export function anwenden(stand, instanz, rohKopf, jetzt = Date.now()) {
   instanz = normModus(instanz);
   if (istObjekt(rohKopf) && rohKopf.art === 'rueckfrage') {
@@ -160,6 +187,17 @@ export function anwenden(stand, instanz, rohKopf, jetzt = Date.now()) {
     if (f && f.meine && f.meine.stand === k.stand && f.zustand === 'offen') neu.meine = f.meine;                // eine Antwort auf diese Fassung bleibt vermerkt
     stand.fragen[key] = neu;
     return f && f.kopf ? 'geaendert' : 'neu';
+  }
+  if (istObjekt(rohKopf) && rohKopf.art === 'fuer_dich' && rohKopf.ding === 'quittung') {
+    const q = quittungKopf(rohKopf);
+    if (!q) return 'ungueltig';
+    if (!istObjekt(stand.quittungen)) stand.quittungen = {};
+    const key = schluesselVon(instanz, q.bezug);
+    const alt = stand.quittungen[key];
+    if (alt && alt.kopf && quittungAelter(q, alt.kopf)) return 'alt';                                          // eine ältere Fassung nach einer neueren
+    if (!alt && Object.keys(stand.quittungen).length >= MAX_QUITTUNGEN) return 'ungueltig';
+    stand.quittungen[key] = { instanz, bezug: q.bezug, kopf: q, gesehen: jetzt };
+    return 'quittung';
   }
   if (istObjekt(rohKopf) && rohKopf.art === 'fuer_dich') {
     const d = dingKopf(rohKopf);
@@ -202,9 +240,16 @@ export function dinge(stand, instanz) {
     .sort((a, b) => (b.kopf.erstellt || '').localeCompare(a.kopf.erstellt || '') || b.gesehen - a.gesehen || a.id.localeCompare(b.id));
 }
 
+// Der Satz, der unter der gesendeten Nachricht steht – oder '' (keine Quittung bekommen).
+export function quittungFuer(stand, instanz, nachricht) {
+  const q = stand && istObjekt(stand.quittungen) ? stand.quittungen[schluesselVon(instanz, nachricht)] : null;
+  return q && q.kopf ? q.kopf.text : '';
+}
+
 // Aufräumen: Erledigtes nach 14 Tagen, Hinweise ohne Rückfrage nach 14 Tagen, gemerkte Umschläge und „Für dich“ nach 30 Tagen.
 // `weg` (optional): hier landen die Schlüssel der „Für dich“-Einträge, die verschwunden sind (ihre PDFs müssen noch gelöscht werden).
 export function aufraeumen(stand, jetzt = Date.now(), weg = []) {
+  if (istObjekt(stand.quittungen)) for (const [k, q] of Object.entries(stand.quittungen)) if (jetzt - q.gesehen > QUITTUNGEN_TAGE * 864e5) delete stand.quittungen[k];
   for (const [k, d] of Object.entries(stand.dinge)) if (jetzt - d.gesehen > DINGE_TAGE * 864e5) { delete stand.dinge[k]; weg.push(k); }
   for (const [k, f] of Object.entries(stand.fragen)) {
     if (f.zustand !== 'offen' && f.erledigt && jetzt - f.erledigt.gesehen > ERLEDIGT_TAGE * 864e5) delete stand.fragen[k];
@@ -288,9 +333,9 @@ export async function antwortBauen({ frage, antwort, geraet, config, privatKey, 
 // kasten: antwortenListe(token, test), antwortHolen(token, id, test), antwortQuittieren(token, id, test) (siehe briefkasten.js)
 // dateiSpeichern(schluessel, bytes) / dateiLoeschen(schluessel): wohin das PDF eines „Für dich“-Eintrags kommt (kann werfen, z. B. Speicher voll:
 // dann wird nichts quittiert und der Umschlag beim nächsten Mal noch einmal geholt).
-// Gibt { neu, geaendert, erledigt, dinge, verworfen, uebersprungen, schluesselFehlt } zurück. Wirft BriefkastenFehler, wenn der Briefkasten nicht antwortet.
+// Gibt { neu, geaendert, erledigt, dinge, quittungen, verworfen, uebersprungen, schluesselFehlt } zurück. Wirft BriefkastenFehler, wenn der Briefkasten nicht antwortet.
 export async function holen({ kasten, geraet, config, privatKey, stand, speichern, test = false, jetzt = () => Date.now(), dateiSpeichern = async () => {}, dateiLoeschen = async () => {} }) {
-  const erg = { neu: 0, geaendert: 0, erledigt: 0, dinge: 0, verworfen: 0, uebersprungen: 0, schluesselFehlt: false };
+  const erg = { neu: 0, geaendert: 0, erledigt: 0, dinge: 0, quittungen: 0, verworfen: 0, uebersprungen: 0, schluesselFehlt: false };
   const r = await kasten.antwortenListe(geraet.token, test);
   if (!istObjekt(r)) return erg;
   if (r.hat_schluessel === false) { erg.schluesselFehlt = true; return erg; }
@@ -317,7 +362,9 @@ export async function holen({ kasten, geraet, config, privatKey, stand, speicher
       const klar = await beglaubigtOeffnen(await entschluesseln(umschlag, privatKey), mac);
       const { kopf, dateien } = auspacken(klar);
       if (kopf && kopf.ziel === instanz) {
-        if (kopf.art === 'fuer_dich') {
+        if (kopf.art === 'fuer_dich' && kopf.ding === 'quittung') {
+          ergebnis = dateien.length ? 'ungueltig' : anwenden(stand, instanz, { ...kopf, dateien: [] }, jetzt());       // eine Quittung trägt nie eine Datei
+        } else if (kopf.art === 'fuer_dich') {
           // Ein Dokument trägt genau ein PDF; alles andere (mehrere Dateien, falscher Typ, kein PDF, zu groß) kommt nicht auf das Handy.
           const roh = { ...kopf, dateien: [] };
           const d = dateien.length === 1 ? dateien[0] : null;
@@ -346,6 +393,7 @@ export async function holen({ kasten, geraet, config, privatKey, stand, speicher
     else if (ergebnis === 'geaendert') erg.geaendert++;
     else if (ergebnis === 'erledigt' || ergebnis === 'vermerkt') erg.erledigt++;
     else if (ergebnis === 'ding') erg.dinge++;
+    else if (ergebnis === 'quittung') erg.quittungen++;
     else if (ergebnis === 'ungueltig' || ergebnis === 'alt') erg.verworfen++;
     await speichern(stand);
     try { await kasten.antwortQuittieren(geraet.token, x.id, test); } catch { /* der Umschlag wird beim nächsten Mal noch einmal quittiert */ }

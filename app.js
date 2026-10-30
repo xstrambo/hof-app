@@ -5,7 +5,7 @@ import { packen, verschluesseln, fotoVerkleinern } from './js/paket.js';
 import { Aufnahme, liveTextMoeglich } from './js/sprache.js';
 import { ECHT, TEST, lesModus, schreibModus, wirksamerModus, testErlaubt, schluesselFuer, zielVon, testBlockiert, TEXTE } from './js/modus.js';
 import { ladeFunktionen, sichtbar as funktionSichtbar, anwenden as funktionenAnwenden } from './js/funktionen.js';
-import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon, dateiSchluessel } from './js/post.js';
+import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon, dateiSchluessel, quittungFuer } from './js/post.js';
 import { zeichnePost, sichtbareFragen, sichtbareDinge } from './js/post-ansicht.js';
 import { FUNKTION as CLOUD, MAX_SEKUNDEN, erkennen, hinweisFuer, wiederholbar, pauseMs, textVerbinden, HINWEIS_LEER, HINWEIS_LAEUFT, HINWEIS_FERTIG } from './js/erkennung.js';
 
@@ -568,8 +568,20 @@ function fuelle(box, liste) {
     if (n.status === 'wartet') { z.classList.add('wartet'); z.append('wartet auf Netz', st); }
     else z.append(zeitText(n.erstellt), st);
     e.appendChild(z);
+    const q = quittungZeile(n, ziel);
+    if (q) { e.classList.add('mit-quittung'); e.appendChild(q); }
     box.appendChild(e);
   }
+  funktionenAnwenden(box, funktionen, modus);                              // die Quittung trägt data-funktion: im Test als „noch nicht freigegeben“ markiert
+}
+// Unter der gesendeten Nachricht: was der Laptop daraus gemacht hat („Angekommen · gebucht: Wareneingang“). Nur auf Verwalter-Handys, nur wenn die
+// Funktion „quittung“ gilt, nur wenn eine Quittung für genau diese Nachricht (und dieses Ziel) da ist. Der Satz kommt vom Laptop und steht nur als Text da.
+function quittungZeile(n, ziel) {
+  if (!postAktiv() || !funktionAktiv('quittung')) return null;
+  const satz = quittungFuer(postStand, ziel, n.id);
+  if (!satz) return null;
+  const q = document.createElement('span'); q.className = 'eintrag-quittung'; q.dataset.funktion = 'quittung'; q.textContent = satz;
+  return q;
 }
 const MINI_ZEICHEN = {
   sprache: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/>',
@@ -639,6 +651,7 @@ $('#b-teilen').addEventListener('click', async () => {
 
 // ---------- Post (Knöpfe) ----------
 $('#b-post').addEventListener('click', () => zeige('s-post'));
+$('#b-post-zeichen').addEventListener('click', () => zeige('s-post'));
 $('#b-zurueck-post').addEventListener('click', () => history.back());
 $('#b-post-neu').addEventListener('click', () => { postNichtBereitBis = 0; postHolen(); });
 
@@ -655,6 +668,7 @@ function modusAnzeigen() {
   document.body.classList.toggle('ist-test', test);
   $('#test-banner').hidden = !test;
   $('#modus-schalter').hidden = !testErlaubt(config, geraet);
+  document.body.classList.toggle('mit-schalter', testErlaubt(config, geraet));       // styles.css: so viel Platz nimmt der Startbildschirm für das Mikrofon ab
   $('#m-echt').setAttribute('aria-pressed', String(!test));
   $('#m-test').setAttribute('aria-pressed', String(test));
   $('#b-senden').classList.toggle('test', test);
@@ -689,7 +703,7 @@ let funktionenGeladen = 0;
 async function funktionenLaden() {
   funktionenGeladen = Date.now();
   const neu = await ladeFunktionen();
-  if (neu) { funktionen = neu; funktionenAnzeigen(); startHinweis(); postAnzeigen(); postHolen(); }
+  if (neu) { funktionen = neu; funktionenAnzeigen(); startHinweis(); postAnzeigen(); postHolen(); zeichneListen(); }
 }
 // Wer die App lange offen hat, bekommt eine neue Freigabe spätestens nach 10 Minuten (beim Zurückkehren in die App).
 document.addEventListener('visibilitychange', () => {
@@ -735,6 +749,7 @@ async function postHolen() {
       if (oeff) await kasten.schluesselSetzen(geraet.token, oeff, modus === TEST).catch(() => {});
     }
     postFehler = ''; postZuletzt = Date.now();
+    if (r.quittungen) zeichneListen();                          // neue Quittungen stehen unter den gesendeten Nachrichten
   } catch (err) {
     const code = err instanceof BriefkastenFehler ? err.code : '';
     if (code === 'aktion') { postFehler = 'nicht_bereit'; postNichtBereitBis = Date.now() + 10 * 60 * 1000; }      // der Briefkasten kennt das noch nicht
@@ -753,7 +768,9 @@ function postAnzeigen() {
   if (warten) teile.push(warten === 1 ? '1 Frage wartet auf dich' : warten + ' Fragen warten auf dich');
   if (dinge) teile.push(dinge === 1 ? '1 Sache für dich' : dinge + ' Sachen für dich');
   $('#post-untertitel').textContent = teile.length ? teile.join(' · ') : 'Keine offenen Fragen';
-  $('#b-post').hidden = geraet?.rolle !== 'admin';
+  const verwalter = geraet?.rolle === 'admin';
+  $('#b-post').hidden = !verwalter || !(warten + dinge);                // die Karte nur, wenn etwas wartet …
+  $('#b-post-zeichen').hidden = !verwalter || !!(warten + dinge);        // … sonst das kleine Zeichen oben neben dem Personen-Symbol
   if (aktuell === 's-post') postZeichnen();
 }
 
