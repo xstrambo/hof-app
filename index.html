@@ -89,6 +89,15 @@
   </div>
   <div class="mitte">
     <div class="mic-ring">
+      <!-- Zwei kleine Knöpfe links und rechts vom Mikrofon (sie nehmen keinen Platz weg): Bereich wählen (Funktion „kacheln“) und Übersicht (Funktion „uebersicht“) -->
+      <button type="button" class="mic-seite links" id="b-bereich" data-funktion="kacheln" aria-label="Bereich wählen">
+        <span class="mic-seite-rund" id="bereich-symbol"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l9 9-8 8z"/><circle cx="7.5" cy="8.5" r="1.2"/></svg></span>
+        <span class="mic-seite-text">Bereich</span>
+      </button>
+      <button type="button" class="mic-seite rechts nur-admin" id="b-uebersicht" data-funktion="uebersicht" aria-label="Übersicht" hidden>
+        <span class="mic-seite-rund"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></span>
+        <span class="mic-seite-text">Übersicht</span>
+      </button>
       <button type="button" class="mic-knopf" id="b-sprechen" aria-label="Aufnahme starten">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/><path d="M8.5 21h7"/></svg>
       </button>
@@ -137,6 +146,7 @@
   <div class="titel-block">
     <h1>Stimmt das so?</h1>
     <span class="leise">Tippe in den Text, um etwas zu ändern.</span>
+    <span class="bereich-pruefen" id="pruef-bereich" data-funktion="kacheln" hidden></span>
   </div>
   <div class="text-block">
     <label for="hof-text" class="ueberschrift">Dein Text</label>
@@ -208,6 +218,38 @@
     <span class="ueberschrift">Dürfen senden</span>
     <div class="liste" id="mitglieder"></div>
   </div>
+</section>
+
+<!-- Übersicht: sechs Reiter, Zahlen und Tabelle vom Laptop (Funktion „uebersicht“) -->
+<section class="screen" id="s-uebersicht" data-funktion="uebersicht" hidden>
+  <div class="zurueck-kopf">
+    <button type="button" class="knopf-icon" id="b-zurueck-uebersicht" aria-label="Zurück"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <h1>Übersicht</h1>
+    <button type="button" class="ue-akt" id="b-ue-neu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg><span>Aktualisieren</span></button>
+  </div>
+  <div class="ue-inhalt">
+    <p class="ue-stand leise klein" id="ue-stand" role="status" aria-live="polite"></p>
+    <div class="ue-reiter-leiste" id="ue-reiter" role="tablist" aria-label="Bereiche"></div>
+    <input type="search" class="ue-such" id="ue-such" placeholder="Suchen" aria-label="In der Tabelle suchen" autocomplete="off">
+    <div id="ue-seite"></div>
+  </div>
+</section>
+
+<!-- Anzeige-Modus (?anzeige=lager) ohne Freigabe -->
+<section class="screen" id="s-anzeige-aus" hidden>
+  <div class="zurueck-kopf"><h1>Anzeige</h1></div>
+  <p class="leise bereich-hilfe">Die Anzeige ist auf diesem Gerät noch nicht freigegeben.</p>
+</section>
+
+<!-- Kacheln: acht Bereiche zum Antippen, bevor man spricht (Funktion „kacheln“) -->
+<section class="screen" id="s-bereich" data-funktion="kacheln" hidden>
+  <div class="zurueck-kopf">
+    <button type="button" class="knopf-icon" id="b-zurueck-bereich" aria-label="Zurück"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <h1>Bereich wählen</h1>
+  </div>
+  <p class="leise bereich-hilfe">Freiwillig – ohne Bereich sortiert die App selbst.</p>
+  <div class="kachel-gitter" id="kachel-gitter"></div>
+  <div class="knopf-stapel"><button type="button" class="knopf neben" id="b-ohne-bereich">Ohne Bereich</button></div>
 </section>
 
 <!-- Post: Rückfragen vom Laptop beantworten -->

@@ -316,3 +316,79 @@ body.mit-schalter #s-start{--schalter:74px}
 .ding-hinweis{margin:0;overflow-wrap:anywhere}
 .erledigt-eintrag .eintrag-text{-webkit-line-clamp:3}
 .ergebnis{font-size:15px;color:var(--leise);overflow-wrap:anywhere}
+
+/* Zwei kleine Knöpfe links und rechts vom Mikrofon (Funktionen „kacheln“ und „uebersicht“): absolut gesetzt, sie nehmen also keinen Platz vom Verlauf und
+   ändern weder Größe noch Lage des Mikrofons. Ist der Rand neben dem Mikrofon schmaler als der Knopf (320 Pixel breit, großes Mikrofon), schiebt sich der
+   Knopf ein Stück über den hellen Ring – nie über den Knopf selbst und nie aus dem Bild. */
+.mic-seite{position:absolute;top:50%;width:60px;margin-top:-34px;padding:0;border:0;background:transparent;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--text)}
+.mic-seite.links{right:calc(100% + min(6px, (100vw - 100%) / 2 - 66px))}
+.mic-seite.rechts{left:calc(100% + min(6px, (100vw - 100%) / 2 - 66px))}
+.mic-seite-rund{width:48px;height:48px;border-radius:50%;border:1.5px solid var(--rahmen);background:var(--flaeche);display:flex;align-items:center;justify-content:center;color:var(--leise)}
+.mic-seite-rund svg{width:26px;height:26px}
+.mic-seite-text{font-size:12px;line-height:1.1;font-weight:700;color:var(--leise);white-space:nowrap}
+.mic-seite.gewaehlt .mic-seite-rund{border-width:2.5px;border-color:currentColor;background:var(--grund)}
+.mic-seite.gewaehlt .mic-seite-text{color:var(--text)}
+.bereich-pruefen{display:block;margin-top:4px;font-weight:700;color:var(--gruen)}
+.bereich-hilfe{margin:4px 20px 0;font-size:15px}
+.kachel-gitter{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px 16px calc(24px + env(safe-area-inset-bottom))}
+.kachel{min-height:clamp(64px,calc((100dvh - 290px) / 4),112px);border-radius:20px;border:1.5px solid var(--rahmen);background:var(--flaeche);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:10px;font-size:16px;text-align:center}
+.kachel:active{transform:scale(.97)}
+.kachel-ic{display:block;line-height:0}
+.kachel-ic svg{width:44px;height:44px;stroke:var(--c);stroke-width:1.6}
+#s-bereich .zurueck-kopf h1{font-size:22px}
+@media (max-height:760px){.kachel-gitter{gap:8px;padding:8px 16px 8px}.kachel{gap:6px;padding:6px}.kachel-ic svg{width:34px;height:34px}.kachel{font-size:15px}#s-bereich .knopf-stapel{padding-bottom:10px}#b-ohne-bereich{min-height:48px}}
+@media (max-height:600px){.kachel-ic svg{width:30px;height:30px}.kachel{font-size:14px;gap:3px;padding:4px}}
+.kachel b{font-weight:700}
+.kachel.an{border-color:var(--c);border-width:3px;background:var(--grund)}
+
+/* Übersicht (Funktion „uebersicht“): Reiter, drei Zahlen, eine Tabelle */
+.ue-akt{display:flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:22px;border:1.5px solid var(--rahmen);background:var(--flaeche);font-size:15px;font-weight:700;color:var(--gruen);flex:none;margin-right:4px}
+.ue-akt svg{width:20px;height:20px}
+#s-uebersicht .zurueck-kopf h1{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:359px){#s-uebersicht .zurueck-kopf h1{font-size:18px}.ue-akt{padding:0 10px;gap:4px;font-size:14px}.ue-akt svg{width:18px;height:18px}}
+.ue-akt.dreht svg{animation:ue-dreh .9s linear infinite}
+.ue-akt:disabled{opacity:.75}
+@keyframes ue-dreh{to{transform:rotate(360deg)}}
+.ue-inhalt{padding:4px 16px calc(24px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:12px}
+.ue-stand{margin:0;min-height:1.4em}
+.ue-reiter-leiste{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 -16px;padding:0 16px}
+.ue-reiter-leiste::-webkit-scrollbar{display:none}
+.ue-reiter{flex:none;display:flex;align-items:center;gap:6px;min-height:44px;padding:0 12px;border-radius:14px;border:1.5px solid var(--rahmen);background:transparent;color:var(--leise);font-size:15px;font-weight:700;white-space:nowrap}
+.ue-reiter svg{width:20px;height:20px;stroke:currentColor;stroke-width:1.8}
+.ue-reiter.an{color:var(--text);border-color:var(--c);background:var(--flaeche)}
+.ue-reiter.an svg{stroke:var(--c)}
+.ue-such{height:48px;border-radius:14px;border:1px solid var(--rahmen);background:var(--flaeche);padding:0 14px;font-size:17px;width:100%}
+.ue-zahlen{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.ue-zahl{background:var(--flaeche);border:1px solid var(--linie);border-radius:14px;padding:10px;min-width:0}
+.ue-zahl b{display:block;font-size:22px;line-height:1.2;overflow-wrap:anywhere}
+.ue-zahl span{display:block;font-size:13px;line-height:1.25;color:var(--leise);overflow-wrap:anywhere}
+.ue-zahl.warn b{color:var(--orange)}
+.ue-zahl.rot b{color:var(--rot)}
+.ue-tabelle{background:var(--flaeche);border:1px solid var(--linie);border-radius:16px;overflow:hidden}
+.ue-tabelle h2{margin:0;padding:10px 14px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--leise);border-bottom:1px solid var(--linie)}
+.ue-zeile{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:10px 14px}
+.ue-zeile+.ue-zeile{border-top:1px solid var(--linie)}
+.ue-zeile.ue-kopf{font-size:13px;color:var(--leise);padding:8px 14px}
+.ue-a{min-width:0;display:flex;flex-direction:column;gap:2px}
+.ue-name{overflow-wrap:anywhere}
+.ue-klein{font-size:14px;color:var(--leise);overflow-wrap:anywhere}
+.ue-z{flex:none;font-weight:700;font-variant-numeric:tabular-nums;text-align:right;max-width:40%;overflow-wrap:anywhere}
+.ue-kopf .ue-z{font-weight:400}
+.ue-marke{display:inline-block;font-size:12px;font-weight:700;padding:1px 8px;border-radius:99px;margin-left:2px}
+.ue-marke.gelb{background:var(--warn-grund);color:var(--warn-text)}
+.ue-marke.rot{background:#FBE3E0;color:var(--rot)}
+.ue-marke.gruen{background:var(--gruen-hell);color:var(--gruen)}
+.ue-hinweis,.ue-leer{margin:0;padding:12px 14px;color:var(--leise);font-size:15px;overflow-wrap:anywhere}
+.ue-hinweis{background:var(--warn-grund);border:1px solid var(--warn-rahmen);border-radius:14px;color:var(--warn-text)}
+
+/* Anzeige-Modus (?anzeige=lager): nur das Warenlager, große Schrift, nur lesen */
+.anzeige-lager #b-zurueck-uebersicht,.anzeige-lager #ue-reiter,.anzeige-lager #ue-such,.anzeige-lager .modus-leiste,.anzeige-lager #modus-schalter{display:none}
+.anzeige-lager .ue-inhalt{padding-left:20px;padding-right:20px}
+.anzeige-lager .ue-zahl b{font-size:34px}
+.anzeige-lager .ue-zahl span{font-size:16px}
+.anzeige-lager .ue-zeile{font-size:24px;padding:14px 16px}
+.anzeige-lager .ue-zeile.ue-kopf{font-size:16px}
+.anzeige-lager .ue-klein{font-size:18px}
+.anzeige-lager .ue-marke{font-size:16px}
+.anzeige-lager #s-uebersicht .zurueck-kopf h1{font-size:30px}
+.anzeige-lager .ue-stand{font-size:16px}

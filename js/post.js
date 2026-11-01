@@ -36,7 +36,7 @@ export const DING_ARTEN = ['dokument', 'ergebnis', 'hinweis'];
 export const schluesselVon = (instanz, id) => `${normModus(instanz)}:${id}`;
 
 // ---- Zustand (liegt im Handy, IndexedDB „einstellungen“) --------------------------------------------------------------------
-export function neuerStand() { return { v: 1, fragen: {}, items: {}, dinge: {}, quittungen: {} }; }
+export function neuerStand() { return { v: 1, fragen: {}, items: {}, dinge: {}, quittungen: {}, uebersicht: {} }; }
 
 const text = (x, n) => (typeof x === 'string' ? x.replace(/\s+/g, ' ').trim().slice(0, n) : '');
 const textMitZeilen = (x, n) => (typeof x === 'string' ? x.replace(/\r/g, '').split('\n').map(z => z.replace(/[ \t]+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, n) : '');
@@ -91,6 +91,58 @@ export function dingKopf(k) {
     bezug: text(k.bezug, 80), erstellt: text(k.erstellt, 40), gesendet: zeitText(k.gesendet),
     ...(datei ? { datei } : {}), ...(fehlt ? { datei_fehlt: fehlt, datei_name: dateiName(k.datei_name) } : {}),
   };
+}
+
+// Die Übersicht (Funktion „uebersicht“): der Laptop schickt auf Anfrage einen Stand mit sechs Reitern. Hier wird alles streng geprüft und gekürzt –
+// was nicht passt, fällt weg; angezeigt wird später nur Text (textContent), nie HTML. Ein Reiter ist entweder ein Hinweis (die Quelle fehlt) oder Zahlen + Tabelle.
+export const UEBERSICHT_TABS = ['lager', 'laden', 'tier', 'best', 'mittel', 'masch'];
+export const UEBERSICHT_MAX_ZEILEN = 150;
+const ZAHL_TON = ['', 'warn', 'rot'];
+const MARKE_TON = ['gelb', 'rot', 'gruen'];
+const einzeilig = (x, n) => (typeof x === 'string' ? x.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n) : '');
+
+function uebersichtTab(t) {
+  if (!istObjekt(t)) return null;
+  const zahlen = (Array.isArray(t.zahlen) ? t.zahlen : []).filter(istObjekt).slice(0, 3)
+    .map(z => ({ wert: einzeilig(z.wert, 16), text: einzeilig(z.text, 40), ton: ZAHL_TON.includes(z.ton) ? z.ton : '' })).filter(z => z.wert || z.text);
+  const tab = istObjekt(t.tabelle) ? t.tabelle : {};
+  const kopf = Array.isArray(tab.kopf) ? tab.kopf : [];
+  const zeilen = [];
+  for (const r of (Array.isArray(tab.zeilen) ? tab.zeilen : []).slice(0, UEBERSICHT_MAX_ZEILEN)) {
+    if (!istObjekt(r)) continue;
+    const a = einzeilig(r.a, 80);
+    if (!a) continue;
+    const m = istObjekt(r.m) && einzeilig(r.m.t, 24) ? { t: einzeilig(r.m.t, 24), ton: MARKE_TON.includes(r.m.ton) ? r.m.ton : 'gelb' } : null;
+    zeilen.push({ a, k: einzeilig(r.k, 120), m, z: einzeilig(r.z, 24) });
+  }
+  return {
+    hinweis: einzeilig(t.hinweis, 240), stand: einzeilig(t.stand, 40), zahlen,
+    tabelle: { titel: einzeilig(tab.titel, 60), kopf: [einzeilig(kopf[0], 30), einzeilig(kopf[1], 30)], zeilen, mehr: Number.isInteger(tab.mehr) && tab.mehr > 0 && tab.mehr < 1e6 ? tab.mehr : 0 },
+  };
+}
+
+export function uebersichtKopf(k) {
+  if (!istObjekt(k) || k.art !== 'uebersicht' || k.version !== 1) return null;
+  const id = typeof k.id === 'string' ? k.id : '';
+  const stand = zeitText(k.stand);
+  if (!ID_OK.test(id) || !stand || !istObjekt(k.tabs)) return null;
+  const tabs = {};
+  for (const name of UEBERSICHT_TABS) { const t = uebersichtTab(k.tabs[name]); if (t) tabs[name] = t; }
+  if (!Object.keys(tabs).length) return null;
+  return { id, frage: typeof k.frage === 'string' && UUID.test(k.frage) ? k.frage : '', stand, gesendet: zeitText(k.gesendet), tabs };
+}
+
+function normUebersicht(key, u) {
+  if (key !== ECHT && key !== TEST) return null;
+  if (!istObjekt(u)) return null;
+  const kopf = uebersichtKopf({ ...u.kopf, art: 'uebersicht', version: 1 });
+  return kopf ? { instanz: key, kopf, gesehen: Number.isFinite(u.gesehen) ? u.gesehen : Date.now() } : null;
+}
+
+// Der zuletzt bekannte Stand der Übersicht dieser Instanz (oder null): bleibt auf dem Handy, auch ohne Netz.
+export function uebersichtFuer(stand, instanz) {
+  const u = stand && istObjekt(stand.uebersicht) ? stand.uebersicht[normModus(instanz)] : null;
+  return u && u.kopf ? u.kopf : null;
 }
 
 // Quittung zu einer Nachricht, die dieses Handy gesendet hat („Angekommen · gebucht: …“). Sie ist keine Karte in der Post, sondern steht im Verlauf
@@ -153,6 +205,12 @@ export function normStand(roh) {
       if (g && Object.keys(aus.dinge).length < MAX_DINGE) aus.dinge[k] = g;
     }
   }
+  if (istObjekt(roh.uebersicht)) {
+    for (const [k, u] of Object.entries(roh.uebersicht)) {
+      const g = normUebersicht(k, u);
+      if (g) aus.uebersicht[k] = g;
+    }
+  }
   if (istObjekt(roh.quittungen)) {
     for (const [k, q] of Object.entries(roh.quittungen)) {
       const g = normQuittung(k, q);
@@ -187,6 +245,15 @@ export function anwenden(stand, instanz, rohKopf, jetzt = Date.now()) {
     if (f && f.meine && f.meine.stand === k.stand && f.zustand === 'offen') neu.meine = f.meine;                // eine Antwort auf diese Fassung bleibt vermerkt
     stand.fragen[key] = neu;
     return f && f.kopf ? 'geaendert' : 'neu';
+  }
+  if (istObjekt(rohKopf) && rohKopf.art === 'uebersicht') {
+    const u = uebersichtKopf(rohKopf);
+    if (!u) return 'ungueltig';
+    if (!istObjekt(stand.uebersicht)) stand.uebersicht = {};
+    const alt = stand.uebersicht[instanz];
+    if (alt && alt.kopf && alt.kopf.stand > u.stand) return 'alt';                                              // ein älterer Stand nach einem neueren
+    stand.uebersicht[instanz] = { instanz, kopf: u, gesehen: jetzt };
+    return 'uebersicht';
   }
   if (istObjekt(rohKopf) && rohKopf.art === 'fuer_dich' && rohKopf.ding === 'quittung') {
     const q = quittungKopf(rohKopf);
@@ -327,6 +394,20 @@ export async function antwortBauen({ frage, antwort, geraet, config, privatKey, 
   return { id: kopf.id, umschlag, instanz, meine: { id: kopf.id, stand: k.stand, text: antwortText(art, wert, frage), am: jetzt.getTime() } };
 }
 
+// ---- Übersicht anfragen ------------------------------------------------------------------------------------------------------
+// Die Anfrage ist winzig (nur eine Kennung) und beglaubigt; sie geht NICHT durch die Warteschlange der Nachrichten (eine Anfrage von gestern soll nicht
+// später den Laptop wecken), sondern gleich in den Briefkasten. Der Laptop antwortet mit einem Umschlag „uebersicht“, den `holen` ablegt.
+// Gibt { id, umschlag, instanz } zurück oder wirft einen Fehler (z. B. wenn der Schlüssel dieser Instanz fehlt – dann wird nichts gesendet).
+export async function uebersichtFrageBauen({ instanz, geraet, config, privatKey, jetzt = new Date() }) {
+  instanz = normModus(instanz);
+  const laptop = schluesselFuer(config, instanz);
+  if (!laptop) throw new Error('kein Schlüssel');
+  const kopf = { art: 'uebersicht_frage', id: crypto.randomUUID(), ziel: instanz, von: geraet.name, geraet: geraet.id, erstellt: jetzt.toISOString() };
+  const mac = await macSchluessel(privatKey, laptop, H2L);
+  const klar = await packen(kopf, []);
+  return { id: kopf.id, umschlag: await verschluesseln(await beglaubigen(klar, mac), laptop), instanz };
+}
+
 // ---- Holen -------------------------------------------------------------------------------------------------------------------
 // Holt alles, was der Laptop für dieses Handy abgelegt hat, prüft es und arbeitet es in `stand` ein. `speichern(stand)` wird nach jeder
 // verarbeiteten Nachricht und VOR dem Quittieren aufgerufen (kommt das Quittieren nicht durch, wird nichts doppelt verarbeitet).
@@ -335,7 +416,7 @@ export async function antwortBauen({ frage, antwort, geraet, config, privatKey, 
 // dann wird nichts quittiert und der Umschlag beim nächsten Mal noch einmal geholt).
 // Gibt { neu, geaendert, erledigt, dinge, quittungen, verworfen, uebersprungen, schluesselFehlt } zurück. Wirft BriefkastenFehler, wenn der Briefkasten nicht antwortet.
 export async function holen({ kasten, geraet, config, privatKey, stand, speichern, test = false, jetzt = () => Date.now(), dateiSpeichern = async () => {}, dateiLoeschen = async () => {} }) {
-  const erg = { neu: 0, geaendert: 0, erledigt: 0, dinge: 0, quittungen: 0, verworfen: 0, uebersprungen: 0, schluesselFehlt: false };
+  const erg = { neu: 0, geaendert: 0, erledigt: 0, dinge: 0, quittungen: 0, uebersicht: 0, verworfen: 0, uebersprungen: 0, schluesselFehlt: false };
   const r = await kasten.antwortenListe(geraet.token, test);
   if (!istObjekt(r)) return erg;
   if (r.hat_schluessel === false) { erg.schluesselFehlt = true; return erg; }
@@ -362,7 +443,9 @@ export async function holen({ kasten, geraet, config, privatKey, stand, speicher
       const klar = await beglaubigtOeffnen(await entschluesseln(umschlag, privatKey), mac);
       const { kopf, dateien } = auspacken(klar);
       if (kopf && kopf.ziel === instanz) {
-        if (kopf.art === 'fuer_dich' && kopf.ding === 'quittung') {
+        if (kopf.art === 'uebersicht') {
+          ergebnis = dateien.length ? 'ungueltig' : anwenden(stand, instanz, { ...kopf, dateien: [] }, jetzt());          // der Stand trägt nie eine Datei
+        } else if (kopf.art === 'fuer_dich' && kopf.ding === 'quittung') {
           ergebnis = dateien.length ? 'ungueltig' : anwenden(stand, instanz, { ...kopf, dateien: [] }, jetzt());       // eine Quittung trägt nie eine Datei
         } else if (kopf.art === 'fuer_dich') {
           // Ein Dokument trägt genau ein PDF; alles andere (mehrere Dateien, falscher Typ, kein PDF, zu groß) kommt nicht auf das Handy.
@@ -394,6 +477,7 @@ export async function holen({ kasten, geraet, config, privatKey, stand, speicher
     else if (ergebnis === 'erledigt' || ergebnis === 'vermerkt') erg.erledigt++;
     else if (ergebnis === 'ding') erg.dinge++;
     else if (ergebnis === 'quittung') erg.quittungen++;
+    else if (ergebnis === 'uebersicht') erg.uebersicht++;
     else if (ergebnis === 'ungueltig' || ergebnis === 'alt') erg.verworfen++;
     await speichern(stand);
     try { await kasten.antwortQuittieren(geraet.token, x.id, test); } catch { /* der Umschlag wird beim nächsten Mal noch einmal quittiert */ }

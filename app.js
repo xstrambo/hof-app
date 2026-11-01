@@ -5,7 +5,9 @@ import { packen, verschluesseln, fotoVerkleinern } from './js/paket.js';
 import { Aufnahme, liveTextMoeglich } from './js/sprache.js';
 import { ECHT, TEST, lesModus, schreibModus, wirksamerModus, testErlaubt, schluesselFuer, zielVon, testBlockiert, TEXTE } from './js/modus.js';
 import { ladeFunktionen, sichtbar as funktionSichtbar, anwenden as funktionenAnwenden } from './js/funktionen.js';
-import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon, dateiSchluessel, quittungFuer } from './js/post.js';
+import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon, dateiSchluessel, quittungFuer, uebersichtFuer, uebersichtFrageBauen } from './js/post.js';
+import { zeichneReiter, zeichneInhalt, standText } from './js/uebersicht.js';
+import { istBereich, bereichVon, symbol as bereichSymbol, zeichneKacheln } from './js/kacheln.js';
 import { zeichnePost, sichtbareFragen, sichtbareDinge } from './js/post-ansicht.js';
 import { FUNKTION as CLOUD, MAX_SEKUNDEN, erkennen, hinweisFuer, wiederholbar, pauseMs, textVerbinden, HINWEIS_LEER, HINWEIS_LAEUFT, HINWEIS_FERTIG } from './js/erkennung.js';
 
@@ -43,7 +45,7 @@ HINWEIS_WECHSEL.aus = HINWEIS_WECHSEL.fehlt;
 HINWEIS_WECHSEL.cloud = 'Ich nehme auf. Nach „Fertig“ steht der Text in ein paar Sekunden da – prüfen, verbessern, senden. Bis zu 3\u00A0Minuten am Stück.';
 let aktuell = null;
 
-function neuerEntwurf() { return { text: '', audio: null, audioDauer: 0, anhaenge: [] }; }
+function neuerEntwurf() { return { text: '', audio: null, audioDauer: 0, anhaenge: [], bereich: '' }; }
 // Eingegebenes geht nie verloren: der ganze Entwurf (Text, Aufnahme, Anhänge) liegt im Handy.
 let entwurfTimer;
 function entwurfMerken(sofort) {
@@ -54,18 +56,26 @@ function entwurfMerken(sofort) {
 }
 
 // ---------- Bildschirme ----------
+// Anzeige-Modus (?anzeige=lager): nur das Warenlager der Übersicht, große Schrift, nur lesen – zum Aufstellen an einem Handy oder Tablet. Alles andere
+// (Sprechen, Senden, Post) gibt es auf diesem Gerät dann nicht; das Gerät muss ein freigegebenes Verwalter-Handy sein, und die Übersicht muss gelten.
+const ANZEIGE = new URLSearchParams(location.search).get('anzeige') === 'lager';
+const anzeigeZiel = () => (funktionAktiv('uebersicht') && geraet?.rolle === 'admin' ? 's-uebersicht' : 's-anzeige-aus');
 function zeige(id, { verlauf = true } = {}) {
   const ziel = document.getElementById(id);
   if (ziel?.dataset.funktion && !funktionAktiv(ziel.dataset.funktion)) id = 's-start';   // Bildschirm einer noch nicht freigegebenen Funktion: nie zeigen
+  if (ANZEIGE && geraet?.status === 'frei' && id !== 's-uebersicht' && id !== 's-anzeige-aus') id = anzeigeZiel();
   if (aktuell === 's-aufnahme' && id !== 's-aufnahme' && aufnahme) { aufnahme.abbrechen(); aufnahme = null; }
   $$('.screen').forEach(s => { s.hidden = s.id !== id; });
   aktuell = id;
   if (verlauf) history.pushState({ s: id }, '');
   window.scrollTo(0, 0);
   if (id === 's-start' || id === 's-gesendet') zeichneListen();
-  if (id === 's-start') startHinweis();                       // der Hinweis hängt davon ab, ob die Cloud-Erkennung gerade pausiert
+  if (id === 's-start') bereichAnzeigen();                    // zeigt auch den Hinweis (er hängt davon ab, ob die Cloud-Erkennung gerade pausiert) und den gewählten Bereich
   if (id === 's-freigaben') ladeFreigaben();
   if (id === 's-post') { postZeichnen(true); postHolen(); }
+  if (id === 's-uebersicht') uebersichtZeichnen();
+  if (id === 's-bereich') bereichZeichnen();
+  if (id === 's-pruefen') bereichAnzeigen();
 }
 window.addEventListener('popstate', e => {
   blattZu();
@@ -94,6 +104,7 @@ addEventListener('offline', netzAnzeigen);
 
 // ---------- Start / Zugang ----------
 async function starten() {
+  if (ANZEIGE) document.body.classList.add('anzeige-lager');
   if ('serviceWorker' in navigator && !config.attrappe) navigator.serviceWorker.register('sw.js').catch(() => {});
   netzAnzeigen();
   geraet = await einstellung.hole('geraet');
@@ -112,6 +123,7 @@ async function starten() {
   history.replaceState({ s: 's-start' }, '');
   zeige('s-start', { verlauf: false });
   hintergrund();
+  if (ANZEIGE) return;
   // Angefangener Entwurf? Dann gleich dort weitermachen.
   if (entwurf.text.trim() || entwurf.audio || entwurf.anhaenge.length) { zeigePruefen(false); meldung('Dein angefangener Entwurf ist noch da.'); }
 }
@@ -188,7 +200,7 @@ for (let i = 0; i < 24; i++) pegel.appendChild(document.createElement('span'));
 
 let uhrTimer;
 async function sprechenStarten(nochmal) {
-  if (!nochmal) { entwurf = { ...neuerEntwurf(), anhaenge: entwurf.anhaenge, text: entwurf.text }; }
+  if (!nochmal) { entwurf = { ...neuerEntwurf(), anhaenge: entwurf.anhaenge, text: entwurf.text, bereich: entwurf.bereich }; }
   const vorher = entwurf.text.trim();
   $('#live-fest').textContent = vorher ? vorher + ' ' : '';
   $('#live-vorlaeufig').textContent = '';
@@ -407,7 +419,7 @@ $('#f-schnell').addEventListener('submit', e => {
   e.preventDefault();
   const t = $('#schnell-text').value.trim();
   if (!t) return;
-  entwurf = { ...neuerEntwurf(), anhaenge: entwurf.anhaenge, text: [entwurf.text.trim(), t].filter(Boolean).join(' ') };
+  entwurf = { ...neuerEntwurf(), anhaenge: entwurf.anhaenge, text: [entwurf.text.trim(), t].filter(Boolean).join(' '), bereich: entwurf.bereich };
   $('#schnell-text').value = '';
   zeigePruefen(false);
 });
@@ -430,7 +442,8 @@ $('#b-senden').addEventListener('click', async () => {
       const art = f.type.startsWith('image/') ? 'foto' : f.type.startsWith('audio/') ? 'sprache' : 'dokument';
       dateien.push({ name: f.name, typ: f.type || 'application/octet-stream', art, daten: new Uint8Array(await f.arrayBuffer()) });
     }
-    const klar = await packen({ id, von: geraet.name, geraet: geraet.id, erstellt: new Date(erstellt).toISOString(), text: entwurf.text, sprachDauer: entwurf.audioDauer || 0, ziel }, dateien);
+    const bereich = kachelnAktiv() && istBereich(entwurf.bereich) ? { bereich: entwurf.bereich } : {};            // die gewählte Kachel (Funktion „kacheln“)
+    const klar = await packen({ id, von: geraet.name, geraet: geraet.id, erstellt: new Date(erstellt).toISOString(), text: entwurf.text, sprachDauer: entwurf.audioDauer || 0, ziel, ...bereich }, dateien);
     const umschlag = await verschluesseln(klar, schluessel);
     const fotos = dateien.filter(d => d.art === 'foto').length;
     const doks = dateien.filter(d => d.art === 'dokument').length;
@@ -698,7 +711,12 @@ $('#b-zu-echt').addEventListener('click', () => { modusSetzen(ECHT); postHolen()
 // funktionen.json sagt je Funktion "test" oder "alle" (js/funktionen.js). Wer die Datei nicht holen kann, behält den bisherigen Stand;
 // ohne Stand gilt überall "test": im echten Betrieb erscheint dann nichts Neues.
 function funktionAktiv(name) { return funktionSichtbar(funktionen, name, modus); }
-function funktionenAnzeigen() { funktionenAnwenden(document, funktionen, modus); }
+function funktionenAnzeigen() {
+  funktionenAnwenden(document, funktionen, modus);
+  bereichAnzeigen();
+  if (aktuell === 's-uebersicht' || aktuell === 's-bereich') { const ziel = document.getElementById(aktuell); if (ziel && !funktionAktiv(ziel.dataset.funktion)) zeige('s-start'); }
+  if (ANZEIGE && geraet?.status === 'frei' && aktuell !== anzeigeZiel()) zeige(anzeigeZiel(), { verlauf: false });
+}
 let funktionenGeladen = 0;
 async function funktionenLaden() {
   funktionenGeladen = Date.now();
@@ -750,6 +768,7 @@ async function postHolen() {
     }
     postFehler = ''; postZuletzt = Date.now();
     if (r.quittungen) zeichneListen();                          // neue Quittungen stehen unter den gesendeten Nachrichten
+    if (r.uebersicht) { if (!ueFragt) ueStatus = ''; if (aktuell === 's-uebersicht') uebersichtZeichnen(); }
   } catch (err) {
     const code = err instanceof BriefkastenFehler ? err.code : '';
     if (code === 'aktion') { postFehler = 'nicht_bereit'; postNichtBereitBis = Date.now() + 10 * 60 * 1000; }      // der Briefkasten kennt das noch nicht
@@ -771,6 +790,7 @@ function postAnzeigen() {
   const verwalter = geraet?.rolle === 'admin';
   $('#b-post').hidden = !verwalter || !(warten + dinge);                // die Karte nur, wenn etwas wartet …
   $('#b-post-zeichen').hidden = !verwalter || !!(warten + dinge);        // … sonst das kleine Zeichen oben neben dem Personen-Symbol
+  $('#b-uebersicht').hidden = !verwalter;                                // die Übersicht (Funktion „uebersicht“; ohne Freigabe blendet styles.css sie aus)
   if (aktuell === 's-post') postZeichnen();
 }
 
@@ -848,6 +868,84 @@ async function postAntworten(f, antwort) {
   }
 }
 
+// ---------- Übersicht (Funktion „uebersicht“) ----------
+// Der Laptop schickt den Stand nur auf Anfrage: „Aktualisieren“ sendet eine kleine beglaubigte Anfrage, der Laptop baut den Stand aus seinen Quellen und
+// schickt ihn zurück (meist nach wenigen Sekunden). Der zuletzt bekannte Stand bleibt im Handy und ist auch ohne Netz da. Es gibt keine ständige Abfrage.
+let ueReiter = 'lager';                // im Anzeige-Modus bleibt es dabei
+let ueSuche = '';
+let ueStatus = '';                 // Satz zum letzten Fragen (leer = alles gut)
+let ueFragt = false;
+function uebersichtZeichnen() {
+  const kopf = uebersichtFuer(postStand, modus);
+  const leiste = $('#ue-reiter');
+  const links = leiste.scrollLeft;
+  zeichneReiter(leiste, ueReiter, name => { if (!ANZEIGE) { ueReiter = name; uebersichtZeichnen(); } });
+  leiste.scrollLeft = links;
+  zeichneInhalt($('#ue-seite'), kopf, ueReiter, ueSuche);
+  $('#ue-stand').textContent = ueFragt ? 'Frage den Laptop …' : ueStatus ? ueStatus + (kopf ? ' ' + standText(kopf.stand) : '') : kopf ? standText(kopf.stand) : 'Noch kein Stand.';
+  $('#b-ue-neu').classList.toggle('dreht', ueFragt);
+  $('#b-ue-neu').disabled = ueFragt;
+}
+async function uebersichtAktualisieren() {
+  if (ueFragt || !geraet) return;
+  if (!postAktiv() || !funktionAktiv('uebersicht')) return;
+  const ziel = modus;                                                       // gefragt wird den Laptop des Modus, in dem man gerade ist
+  if (!navigator.onLine) { ueStatus = 'Kein Netz – das ist der letzte Stand.'; uebersichtZeichnen(); return; }
+  const privatKey = await privaterSchluessel();
+  if (!privatKey || !schluesselFuer(config, ziel)) { ueStatus = 'Dieses Handy kann gerade nicht fragen. Bitte Claude Bescheid geben.'; uebersichtZeichnen(); return; }
+  ueFragt = true; ueStatus = ''; uebersichtZeichnen();
+  try {
+    const r = await uebersichtFrageBauen({ instanz: ziel, geraet, config, privatKey });
+    await kasten.senden(geraet.token, r.id, new Blob([r.umschlag], { type: 'application/octet-stream' }), ziel);
+    const ende = Date.now() + 30000;
+    while (Date.now() < ende) {
+      await new Promise(ok => setTimeout(ok, 1200));
+      await postHolen();
+      const k = uebersichtFuer(postStand, ziel);
+      if (k && k.frage === r.id) { ueStatus = ''; return; }
+    }
+    ueStatus = 'Der Laptop hat nicht geantwortet.';
+  } catch (err) {
+    const code = err instanceof BriefkastenFehler ? err.code : '';
+    ueStatus = testBlockiert(ziel, code) ? TEXTE.testNichtBereit : code === 'netz' ? 'Kein Netz – das ist der letzte Stand.'
+      : code === 'bremse' ? 'Bitte kurz warten und noch einmal tippen.' : 'Das Fragen ging nicht.';
+  } finally { ueFragt = false; uebersichtZeichnen(); }
+}
+$('#b-uebersicht').addEventListener('click', () => zeige('s-uebersicht'));
+$('#b-zurueck-uebersicht').addEventListener('click', () => history.back());
+$('#b-ue-neu').addEventListener('click', () => uebersichtAktualisieren());
+$('#ue-such').addEventListener('input', e => { ueSuche = e.target.value; zeichneInhalt($('#ue-seite'), uebersichtFuer(postStand, modus), ueReiter, ueSuche); });
+
+// ---------- Kacheln (Funktion „kacheln“) ----------
+// Eine schmale Zeile über dem Mikrofon; die acht Kacheln stehen auf einem eigenen Bildschirm (auf kleinen Handys ist auf dem Startbildschirm kein Platz dafür).
+// Die gewählte Kachel geht mit der nächsten Nachricht als Feld `bereich` mit; ohne Kachel ist alles wie bisher.
+const kachelnAktiv = () => funktionAktiv('kacheln');
+function bereichAnzeigen() {
+  const b = kachelnAktiv() ? bereichVon(entwurf.bereich) : null;
+  const knopf = $('#b-bereich');
+  knopf.classList.toggle('gewaehlt', !!b);
+  knopf.setAttribute('aria-label', b ? 'Bereich: ' + b.name + ' – ändern' : 'Bereich wählen');
+  knopf.style.color = b ? b.farbe : '';
+  const rund = $('#bereich-symbol');
+  if (b) rund.replaceChildren(bereichSymbol(b.wert));
+  else rund.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l9 9-8 8z"/><circle cx="7.5" cy="8.5" r="1.2"/></svg>';        // fester Text aus diesem Programm
+  const p = $('#pruef-bereich');
+  p.textContent = b ? 'Bereich: ' + b.name : '';
+  p.hidden = !b;
+  startHinweis();
+}
+function bereichZeichnen() {
+  zeichneKacheln($('#kachel-gitter'), kachelnAktiv() ? entwurf.bereich : '', wert => {
+    entwurf.bereich = wert;
+    entwurfMerken();
+    bereichAnzeigen();
+    history.back();
+  });
+}
+$('#b-bereich').addEventListener('click', () => zeige('s-bereich'));
+$('#b-ohne-bereich').addEventListener('click', () => { entwurf.bereich = ''; entwurfMerken(); bereichAnzeigen(); history.back(); });
+$('#b-zurueck-bereich').addEventListener('click', () => history.back());
+
 // ---------- Hilfen ----------
 function dauerText(s) { s = Math.round(s || 0); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
 function zeitText(ms) {
@@ -859,7 +957,9 @@ function endung(typ) { return typ.includes('mp4') ? 'm4a' : typ.includes('ogg') 
 
 function startHinweis() {
   const h = $('#start-hinweis');
-  if (cloudAktiv()) h.textContent = 'Nach dem Sprechen steht der Text gleich da.';
+  const gewaehlt = funktionAktiv('kacheln') ? bereichVon(entwurf.bereich) : null;
+  if (gewaehlt) h.textContent = 'Bereich: ' + gewaehlt.name + ' – jetzt sprechen oder schreiben.';
+  else if (cloudAktiv()) h.textContent = 'Nach dem Sprechen steht der Text gleich da.';
   else if (config.live_text !== 'handy' || !liveTextMoeglich) h.textContent = HINWEIS_KEIN_LIVETEXT;
   else h.textContent = 'Der Text erscheint, während du sprichst.';
 }
@@ -868,6 +968,8 @@ function startHinweis() {
 window.hofApp = {
   postausgang, quittungenHolen, nachrichten, zeichneListen, modus: () => modus, funktion: funktionAktiv, funktionenLaden, funktionen: () => ({ ...funktionen }),
   post: { holen: postHolen, stand: () => JSON.parse(JSON.stringify(postStand)), zeichnen: postZeichnen },
+  uebersicht: { aktualisieren: uebersichtAktualisieren, fragt: () => ueFragt, status: () => ueStatus },
+  bereich: () => entwurf.bereich,
   sprache: { cloudAktiv, pauseBis: () => cloudPauseBis, offen: () => erkennungOffen },
 };
 
