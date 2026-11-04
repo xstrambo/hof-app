@@ -59,12 +59,21 @@ export function frageKopf(k) {
     }
   }
   const werkzeug = text(k.werkzeug, 60);
+  // Die ganze Nachricht, auf die sich die Frage bezieht (nur Text; ungekürzt bis 4000 Zeichen) und die erkannten Positionen
+  const nachricht = {};
+  if (istObjekt(k.nachricht)) {
+    const nt = textMitZeilen(k.nachricht.text, 4000);
+    const np = (Array.isArray(k.nachricht.positionen) ? k.nachricht.positionen : []).slice(0, 40).map(x => text(x, 240)).filter(Boolean);
+    if (nt) nachricht.text = nt;
+    if (np.length) nachricht.positionen = np;
+  }
   return {
     id, stand: k.stand, text: textMitZeilen(k.text, 2000), werkzeug, werkzeug_titel: text(k.werkzeug_titel, 60) || werkzeug,
     frage_art: k.frage_art === 'freigabe' ? 'freigabe' : 'frage', antworten, bezug: text(k.bezug, 80), an: text(k.an, 40),
     erstellt: text(k.erstellt, 40), gesendet: zeitText(k.gesendet),
     ...(EINGABEN.includes(k.eingabe) ? { eingabe: k.eingabe } : {}),
     ...(punkte.length ? { punkte } : {}),
+    ...(nachricht.text || nachricht.positionen ? { nachricht } : {}),
   };
 }
 

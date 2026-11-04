@@ -311,6 +311,10 @@ body.mit-schalter #s-start{--schalter:74px}
 .zurueck-kopf h1{flex:1}
 .frage{background:var(--flaeche);border:1px solid var(--linie);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:10px}
 .frage.test{border-left:6px solid var(--test)}
+.nachricht{margin:2px 0;padding:8px 12px;border:1px solid var(--rahmen);border-radius:12px;background:#fff}
+.nachricht summary{cursor:pointer;font-weight:700;font-size:16px}
+.nachricht-text{margin:8px 0 4px;font-size:17px;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere}
+.nachricht-positionen{margin:4px 0 0;padding-left:20px;font-size:16px;overflow-wrap:anywhere}
 .frage-text{margin:0;font-size:19px;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere}
 .antwort-bereich{display:flex;flex-direction:column;gap:10px}
 .antworten{display:flex;flex-direction:column;gap:8px}

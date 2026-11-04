@@ -131,6 +131,19 @@ function frageKarte(f, ctx) {
   kopf.appendChild(z);
   karte.appendChild(kopf);
   karte.appendChild(el('p', 'frage-text', k.text));
+  if (k.nachricht) {                                                 // die ganze Nachricht, auf die sich die Frage bezieht (nur Text, aufgeklappt)
+    const box = el('details', 'nachricht');
+    box.open = true;
+    box.appendChild(el('summary', null, 'Die ganze Nachricht'));
+    if (k.nachricht.text) box.appendChild(el('p', 'nachricht-text', k.nachricht.text));
+    if (k.nachricht.positionen && k.nachricht.positionen.length) {
+      box.appendChild(el('p', 'leise klein', 'Erkannte Positionen'));
+      const liste = el('ul', 'nachricht-positionen');
+      for (const x of k.nachricht.positionen) liste.appendChild(el('li', null, x));
+      box.appendChild(liste);
+    }
+    karte.appendChild(box);
+  }
 
   const eigene = f.meine && f.meine.stand === k.stand ? f.meine : null;
   if (eigene) {                                                      // auf diese Fassung wurde schon geantwortet: warten auf die Bestätigung des Laptops
