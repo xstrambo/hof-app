@@ -5,7 +5,8 @@ import { packen, verschluesseln, fotoVerkleinern } from './js/paket.js';
 import { Aufnahme, liveTextMoeglich } from './js/sprache.js';
 import { ECHT, TEST, lesModus, schreibModus, wirksamerModus, testErlaubt, schluesselFuer, zielVon, testBlockiert, TEXTE } from './js/modus.js';
 import { ladeFunktionen, sichtbar as funktionSichtbar, anwenden as funktionenAnwenden } from './js/funktionen.js';
-import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon, dateiSchluessel, quittungFuer, uebersichtFuer, uebersichtFrageBauen } from './js/post.js';
+import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon, dateiSchluessel, quittungFuer, uebersichtFuer, uebersichtFrageBauen, bestaetigungFuer, bestaetigungAntwortBauen } from './js/post.js';
+import { zeichneKarte, einblendungText, WAHL_TEXT } from './js/bestaetigung-ansicht.js';
 import { zeichneReiter, zeichneInhalt, standText } from './js/uebersicht.js';
 import { istBereich, bereichVon, symbol as bereichSymbol, zeichneKacheln } from './js/kacheln.js';
 import { zeichnePost, sichtbareFragen, sichtbareDinge } from './js/post-ansicht.js';
@@ -583,6 +584,8 @@ function fuelle(box, liste) {
     e.appendChild(z);
     const q = quittungZeile(n, ziel);
     if (q) { e.classList.add('mit-quittung'); e.appendChild(q); }
+    const karte = karteZeile(n, ziel);
+    if (karte) { e.classList.add('mit-karte'); e.appendChild(karte); }
     box.appendChild(e);
   }
   funktionenAnwenden(box, funktionen, modus);                              // die Quittung trägt data-funktion: im Test als „noch nicht freigegeben“ markiert
@@ -596,6 +599,57 @@ function quittungZeile(n, ziel) {
   const q = document.createElement('span'); q.className = 'eintrag-quittung'; q.dataset.funktion = 'quittung'; q.textContent = satz;
   return q;
 }
+// Unter der Quittung: die Karte „Bestätigen?“ (Funktion „bestaetigung“) – was der Laptop verstanden hat, mit „Stimmt“ und „Falsch“. Nur auf Verwalter-Handys, nur für diese Nachricht und dieses Ziel.
+function karteZeile(n, ziel) {
+  if (!postAktiv() || !funktionAktiv('rueckfragen') || !funktionAktiv('bestaetigung')) return null;
+  const b = bestaetigungFuer(postStand, ziel, n.id);
+  return b ? zeichneKarte(b, karteAntworten) : null;
+}
+// „Stimmt“ / „Falsch“: eine kleine beglaubigte Antwort in die Warteschlange legen (geht auch ohne Netz raus). Die erste Antwort gilt; danach sind die Knöpfe weg.
+async function karteAntworten(eintrag, wahl) {
+  const key = schluesselVon(eintrag.instanz, eintrag.bezug);
+  const aktuell = postStand.bestaetigungen[key];
+  if (!aktuell || aktuell.kopf.stand !== 'offen' || aktuell.meine || aktuell.kopf.id !== eintrag.kopf.id) { zeichneListen(); return true; }
+  if (!schluesselFuer(config, aktuell.instanz)) { meldung(TEXTE.keinSchluessel[aktuell.instanz], 6000); return false; }
+  const privatKey = await privaterSchluessel();
+  if (!privatKey) { meldung('Dieses Handy kann gerade nicht antworten (Schlüssel fehlt). Bitte Claude Bescheid geben.', 6000); return false; }
+  try {
+    const r = await bestaetigungAntwortBauen({ eintrag: aktuell, wahl, geraet, config, privatKey });
+    await nachrichten.speichere({
+      id: r.id, erstellt: Date.now(), status: 'wartet', ziel: r.instanz, art: 'antwort', frage: key,
+      vorschau: 'Antwort: ' + WAHL_TEXT[wahl], sprache: 0, fotos: 0, doks: 0,
+      umschlag: new Blob([r.umschlag], { type: 'application/octet-stream' }),
+    });
+    const jetzt = postStand.bestaetigungen[key];                // unterdessen kann eine neue Fassung gekommen sein: dann gilt die Antwort nicht dafür
+    if (jetzt && jetzt.kopf.fassung === aktuell.kopf.fassung && jetzt.kopf.stand === 'offen') jetzt.meine = r.meine;
+    await postSpeichern(postStand);
+    zeichneListen();
+    await postausgang();
+    return true;
+  } catch (err) {
+    console.error(err);
+    meldung('Die Antwort ging nicht. Bitte nochmal versuchen.', 5000);
+    return false;
+  }
+}
+// Neue Karten, die noch nicht angekündigt wurden: kurz oben eingeblendet (antippen: zur Karte)
+async function karteAnkuendigen() {
+  if (!postAktiv() || !funktionAktiv('bestaetigung')) return;
+  let neu = null;
+  for (const b of Object.values(postStand.bestaetigungen || {})) {
+    if (b.neu && b.instanz === modus) { if (b.kopf.stand === 'offen' && !b.meine) neu = b; b.neu = false; }
+    else if (b.neu) b.neu = false;
+  }
+  await postSpeichern(postStand);
+  if (neu) einblendung(einblendungText(neu), 6000);
+}
+let einblendungTimer;
+function einblendung(text, ms) {
+  const m = $('#einblendung'); if (!m) return;
+  m.textContent = text; m.hidden = false;
+  clearTimeout(einblendungTimer); einblendungTimer = setTimeout(() => { m.hidden = true; }, ms);
+}
+$('#einblendung').addEventListener('click', () => { $('#einblendung').hidden = true; if (geraet?.status === 'frei') zeige('s-gesendet'); });
 const MINI_ZEICHEN = {
   sprache: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/>',
   foto: '<path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/>',
@@ -767,7 +821,8 @@ async function postHolen() {
       if (oeff) await kasten.schluesselSetzen(geraet.token, oeff, modus === TEST).catch(() => {});
     }
     postFehler = ''; postZuletzt = Date.now();
-    if (r.quittungen) zeichneListen();                          // neue Quittungen stehen unter den gesendeten Nachrichten
+    if (r.quittungen || r.bestaetigungen) zeichneListen();     // neue Quittungen und Karten stehen unter den gesendeten Nachrichten
+    if (r.bestaetigungen) karteAnkuendigen();
     if (r.uebersicht) { if (!ueFragt) ueStatus = ''; if (aktuell === 's-uebersicht') uebersichtZeichnen(); }
   } catch (err) {
     const code = err instanceof BriefkastenFehler ? err.code : '';

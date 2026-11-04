@@ -30,13 +30,16 @@ const DINGE_TAGE = 30;          // „Für dich“ bleibt so lange auf dem Handy
 const MAX_DINGE = 100;
 const QUITTUNGEN_TAGE = 30;     // eine Quittung bleibt so lange, wie die gesendete Nachricht im Verlauf steht
 const MAX_QUITTUNGEN = 300;
+const MAX_BESTAETIGUNGEN = 100;   // Karten „Bestätigen?“, solange die Nachricht im Verlauf steht
+export const KARTEN_STAENDE = ['offen', 'stimmt', 'falsch'];
+export const KARTEN_WAHLEN = ['stimmt', 'falsch'];
 export const MAX_PDF = 10 * 1024 * 1024;     // größer als 10 MB bekommt das Handy nicht (der Laptop schickt dann nur den Hinweis)
 export const DING_ARTEN = ['dokument', 'ergebnis', 'hinweis'];
 
 export const schluesselVon = (instanz, id) => `${normModus(instanz)}:${id}`;
 
 // ---- Zustand (liegt im Handy, IndexedDB „einstellungen“) --------------------------------------------------------------------
-export function neuerStand() { return { v: 1, fragen: {}, items: {}, dinge: {}, quittungen: {}, uebersicht: {} }; }
+export function neuerStand() { return { v: 1, fragen: {}, items: {}, dinge: {}, quittungen: {}, uebersicht: {}, bestaetigungen: {} }; }
 
 const text = (x, n) => (typeof x === 'string' ? x.replace(/\s+/g, ' ').trim().slice(0, n) : '');
 const textMitZeilen = (x, n) => (typeof x === 'string' ? x.replace(/\r/g, '').split('\n').map(z => z.replace(/[ \t]+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, n) : '');
@@ -164,6 +167,43 @@ function normQuittung(key, q) {
   return { instanz: q.instanz, bezug: kopf.bezug, kopf, gesehen: Number.isFinite(q.gesehen) ? q.gesehen : Date.now() };
 }
 
+// Die Karte „Bestätigen?“ zu einer Nachricht (Funktion „bestaetigung“): die erkannten Werte in festen Feldern und zwei Knöpfe. Sie steht im Verlauf unter der Nachricht (bezug).
+// stand: 'offen' (wartet auf „Stimmt“ / „Falsch“) | 'stimmt' | 'falsch' (dann sagt `satz`, was der Laptop getan hat). Je Nachricht gilt die neueste Fassung.
+const kartenText = (x, n) => einzeilig(typeof x === 'number' ? String(x) : x, n);
+export function bestaetigungKopf(k) {
+  if (!istObjekt(k) || k.art !== 'fuer_dich' || k.ding !== 'bestaetigung') return null;
+  const id = typeof k.id === 'string' ? k.id : '';
+  const bezug = typeof k.bezug === 'string' ? k.bezug : '';
+  if (!/^b-[0-9a-z]{8,16}$/.test(id) || !UUID.test(bezug) || !KARTEN_STAENDE.includes(k.stand)) return null;
+  const karten = [];
+  for (const b of (Array.isArray(k.karten) ? k.karten : []).slice(0, 8)) {
+    if (!istObjekt(b)) continue;
+    const felder = [];
+    for (const f of (Array.isArray(b.felder) ? b.felder : []).slice(0, 8)) {
+      if (Array.isArray(f) && f.length === 2) { const n = kartenText(f[0], 24), w = kartenText(f[1], 80); if (n && w) felder.push([n, w]); }
+    }
+    const titel = kartenText(b.titel, 60);
+    if (titel && felder.length) karten.push({ titel, felder });
+  }
+  if (!karten.length) return null;
+  const satz = einzeilig(k.satz, 240);
+  if (k.stand !== 'offen' && !satz) return null;
+  return { id, bezug, stand: k.stand, karten, satz, hash: einzeilig(k.hash, 20), fassung: Number.isInteger(k.fassung) && k.fassung >= 0 && k.fassung < 1e9 ? k.fassung : 0,
+           erstellt: text(k.erstellt, 40), gesendet: zeitText(k.gesendet) };
+}
+const bestaetigungAelter = (neu, alt) => spaeterAls(alt.gesendet, neu.gesendet) || (!spaeterAls(neu.gesendet, alt.gesendet) && neu.fassung < alt.fassung);
+
+function normBestaetigung(key, b) {
+  if (!istObjekt(b) || (b.instanz !== ECHT && b.instanz !== TEST)) return null;
+  const kopf = bestaetigungKopf({ ...b.kopf, art: 'fuer_dich', ding: 'bestaetigung' });
+  if (!kopf || key !== schluesselVon(b.instanz, kopf.bezug)) return null;
+  const aus = { instanz: b.instanz, bezug: kopf.bezug, kopf, gesehen: Number.isFinite(b.gesehen) ? b.gesehen : Date.now(), neu: b.neu === true };
+  if (istObjekt(b.meine) && KARTEN_WAHLEN.includes(b.meine.wahl) && b.meine.fassung === kopf.fassung && typeof b.meine.id === 'string') {
+    aus.meine = { id: b.meine.id, wahl: b.meine.wahl, fassung: b.meine.fassung, am: Number.isFinite(b.meine.am) ? b.meine.am : Date.now() };
+  }
+  return aus;
+}
+
 function normDing(key, d) {
   if (!istObjekt(d) || (d.instanz !== ECHT && d.instanz !== TEST)) return null;
   const kopf = dingKopf({ ...d.kopf, art: 'fuer_dich' });
@@ -217,6 +257,12 @@ export function normStand(roh) {
       if (g && Object.keys(aus.quittungen).length < MAX_QUITTUNGEN) aus.quittungen[k] = g;
     }
   }
+  if (istObjekt(roh.bestaetigungen)) {
+    for (const [k, b] of Object.entries(roh.bestaetigungen)) {
+      const g = normBestaetigung(k, b);
+      if (g && Object.keys(aus.bestaetigungen).length < MAX_BESTAETIGUNGEN) aus.bestaetigungen[k] = g;
+    }
+  }
   return aus;
 }
 
@@ -226,7 +272,7 @@ export function spaeterAls(a, b) {
 }
 
 // ---- Eine Nachricht des Laptops in den Zustand einarbeiten -------------------------------------------------------------------
-// Gibt zurück: 'neu' | 'geaendert' | 'gleich' | 'erledigt' | 'vermerkt' (Hinweis zu einer unbekannten Rückfrage) | 'ding' („Für dich“) | 'quittung' | 'alt' | 'ungueltig'
+// Gibt zurück: 'neu' | 'geaendert' | 'gleich' | 'erledigt' | 'vermerkt' (Hinweis zu einer unbekannten Rückfrage) | 'ding' („Für dich“) | 'quittung' | 'bestaetigung' | 'alt' | 'ungueltig'
 export function anwenden(stand, instanz, rohKopf, jetzt = Date.now()) {
   instanz = normModus(instanz);
   if (istObjekt(rohKopf) && rohKopf.art === 'rueckfrage') {
@@ -265,6 +311,19 @@ export function anwenden(stand, instanz, rohKopf, jetzt = Date.now()) {
     if (!alt && Object.keys(stand.quittungen).length >= MAX_QUITTUNGEN) return 'ungueltig';
     stand.quittungen[key] = { instanz, bezug: q.bezug, kopf: q, gesehen: jetzt };
     return 'quittung';
+  }
+  if (istObjekt(rohKopf) && rohKopf.art === 'fuer_dich' && rohKopf.ding === 'bestaetigung') {
+    const b = bestaetigungKopf(rohKopf);
+    if (!b) return 'ungueltig';
+    if (!istObjekt(stand.bestaetigungen)) stand.bestaetigungen = {};
+    const key = schluesselVon(instanz, b.bezug);
+    const alt = stand.bestaetigungen[key];
+    if (alt && alt.kopf && bestaetigungAelter(b, alt.kopf)) return 'alt';                                       // eine ältere Fassung nach einer neueren
+    if (!alt && Object.keys(stand.bestaetigungen).length >= MAX_BESTAETIGUNGEN) return 'ungueltig';
+    // Eine Antwort dieses Handys bleibt nur für genau die Fassung vermerkt, auf die sie sich bezog (und sie ist vermerkt, bis der Laptop meldet, was er getan hat)
+    const meine = alt && alt.meine && alt.kopf && alt.kopf.hash === b.hash && b.stand === 'offen' ? alt.meine : undefined;
+    stand.bestaetigungen[key] = { instanz, bezug: b.bezug, kopf: b, gesehen: alt ? alt.gesehen : jetzt, neu: !alt || alt.kopf.stand !== b.stand || alt.neu === true, ...(meine ? { meine } : {}) };
+    return 'bestaetigung';
   }
   if (istObjekt(rohKopf) && rohKopf.art === 'fuer_dich') {
     const d = dingKopf(rohKopf);
@@ -313,10 +372,17 @@ export function quittungFuer(stand, instanz, nachricht) {
   return q && q.kopf ? q.kopf.text : '';
 }
 
+// Die Karte „Bestätigen?“ zu einer Nachricht: { kopf, meine, ... } oder null (keine bekommen).
+export function bestaetigungFuer(stand, instanz, nachricht) {
+  const b = stand && istObjekt(stand.bestaetigungen) ? stand.bestaetigungen[schluesselVon(instanz, nachricht)] : null;
+  return b && b.kopf ? b : null;
+}
+
 // Aufräumen: Erledigtes nach 14 Tagen, Hinweise ohne Rückfrage nach 14 Tagen, gemerkte Umschläge und „Für dich“ nach 30 Tagen.
 // `weg` (optional): hier landen die Schlüssel der „Für dich“-Einträge, die verschwunden sind (ihre PDFs müssen noch gelöscht werden).
 export function aufraeumen(stand, jetzt = Date.now(), weg = []) {
   if (istObjekt(stand.quittungen)) for (const [k, q] of Object.entries(stand.quittungen)) if (jetzt - q.gesehen > QUITTUNGEN_TAGE * 864e5) delete stand.quittungen[k];
+  if (istObjekt(stand.bestaetigungen)) for (const [k, b] of Object.entries(stand.bestaetigungen)) if (jetzt - b.gesehen > QUITTUNGEN_TAGE * 864e5) delete stand.bestaetigungen[k];
   for (const [k, d] of Object.entries(stand.dinge)) if (jetzt - d.gesehen > DINGE_TAGE * 864e5) { delete stand.dinge[k]; weg.push(k); }
   for (const [k, f] of Object.entries(stand.fragen)) {
     if (f.zustand !== 'offen' && f.erledigt && jetzt - f.erledigt.gesehen > ERLEDIGT_TAGE * 864e5) delete stand.fragen[k];
@@ -408,15 +474,31 @@ export async function uebersichtFrageBauen({ instanz, geraet, config, privatKey,
   return { id: kopf.id, umschlag: await verschluesseln(await beglaubigen(klar, mac), laptop), instanz };
 }
 
+// ---- „Stimmt“ / „Falsch“ zur Karte ------------------------------------------------------------------------------------------------
+// Die Antwort ist klein und beglaubigt (Art „bestaetigung_antwort“: Karte, Nachricht, Fassung, Wahl – keine Werte). Sie geht durch die Warteschlange der Nachrichten
+// (klappt auch ohne Netz). Der Laptop prüft, dass die Karte diesem Handy gehört, und nimmt nur die erste Antwort.
+export async function bestaetigungAntwortBauen({ eintrag, wahl, geraet, config, privatKey, jetzt = new Date() }) {
+  const instanz = normModus(eintrag.instanz);
+  const laptop = schluesselFuer(config, instanz);
+  if (!laptop) throw new Error('kein Schlüssel');
+  const k = eintrag.kopf;
+  if (!KARTEN_WAHLEN.includes(wahl)) throw new Error('Antwort gibt es nicht');
+  if (k.stand !== 'offen' || eintrag.meine) throw new Error('schon beantwortet');
+  const kopf = { art: 'bestaetigung_antwort', id: crypto.randomUUID(), karte: k.id, bezug: k.bezug, fassung: k.fassung, wahl, ziel: instanz, von: geraet.name, geraet: geraet.id, erstellt: jetzt.toISOString() };
+  const mac = await macSchluessel(privatKey, laptop, H2L);
+  const klar = await packen(kopf, []);
+  return { id: kopf.id, umschlag: await verschluesseln(await beglaubigen(klar, mac), laptop), instanz, meine: { id: kopf.id, wahl, fassung: k.fassung, am: jetzt.getTime() } };
+}
+
 // ---- Holen -------------------------------------------------------------------------------------------------------------------
 // Holt alles, was der Laptop für dieses Handy abgelegt hat, prüft es und arbeitet es in `stand` ein. `speichern(stand)` wird nach jeder
 // verarbeiteten Nachricht und VOR dem Quittieren aufgerufen (kommt das Quittieren nicht durch, wird nichts doppelt verarbeitet).
 // kasten: antwortenListe(token, test), antwortHolen(token, id, test), antwortQuittieren(token, id, test) (siehe briefkasten.js)
 // dateiSpeichern(schluessel, bytes) / dateiLoeschen(schluessel): wohin das PDF eines „Für dich“-Eintrags kommt (kann werfen, z. B. Speicher voll:
 // dann wird nichts quittiert und der Umschlag beim nächsten Mal noch einmal geholt).
-// Gibt { neu, geaendert, erledigt, dinge, quittungen, verworfen, uebersprungen, schluesselFehlt } zurück. Wirft BriefkastenFehler, wenn der Briefkasten nicht antwortet.
+// Gibt { neu, geaendert, erledigt, dinge, quittungen, bestaetigungen, verworfen, uebersprungen, schluesselFehlt } zurück. Wirft BriefkastenFehler, wenn der Briefkasten nicht antwortet.
 export async function holen({ kasten, geraet, config, privatKey, stand, speichern, test = false, jetzt = () => Date.now(), dateiSpeichern = async () => {}, dateiLoeschen = async () => {} }) {
-  const erg = { neu: 0, geaendert: 0, erledigt: 0, dinge: 0, quittungen: 0, uebersicht: 0, verworfen: 0, uebersprungen: 0, schluesselFehlt: false };
+  const erg = { neu: 0, geaendert: 0, erledigt: 0, dinge: 0, quittungen: 0, bestaetigungen: 0, uebersicht: 0, verworfen: 0, uebersprungen: 0, schluesselFehlt: false };
   const r = await kasten.antwortenListe(geraet.token, test);
   if (!istObjekt(r)) return erg;
   if (r.hat_schluessel === false) { erg.schluesselFehlt = true; return erg; }
@@ -445,6 +527,8 @@ export async function holen({ kasten, geraet, config, privatKey, stand, speicher
       if (kopf && kopf.ziel === instanz) {
         if (kopf.art === 'uebersicht') {
           ergebnis = dateien.length ? 'ungueltig' : anwenden(stand, instanz, { ...kopf, dateien: [] }, jetzt());          // der Stand trägt nie eine Datei
+        } else if (kopf.art === 'fuer_dich' && kopf.ding === 'bestaetigung') {
+          ergebnis = dateien.length ? 'ungueltig' : anwenden(stand, instanz, { ...kopf, dateien: [] }, jetzt());       // eine Karte trägt nie eine Datei
         } else if (kopf.art === 'fuer_dich' && kopf.ding === 'quittung') {
           ergebnis = dateien.length ? 'ungueltig' : anwenden(stand, instanz, { ...kopf, dateien: [] }, jetzt());       // eine Quittung trägt nie eine Datei
         } else if (kopf.art === 'fuer_dich') {
@@ -477,6 +561,7 @@ export async function holen({ kasten, geraet, config, privatKey, stand, speicher
     else if (ergebnis === 'erledigt' || ergebnis === 'vermerkt') erg.erledigt++;
     else if (ergebnis === 'ding') erg.dinge++;
     else if (ergebnis === 'quittung') erg.quittungen++;
+    else if (ergebnis === 'bestaetigung') erg.bestaetigungen++;
     else if (ergebnis === 'uebersicht') erg.uebersicht++;
     else if (ergebnis === 'ungueltig' || ergebnis === 'alt') erg.verworfen++;
     await speichern(stand);

@@ -5,6 +5,7 @@
   "fuer_dich": "alle",
   "quittung": "alle",
   "sprache_cloud": "test",
-  "uebersicht": "test",
-  "kacheln": "test"
+  "uebersicht": "alle",
+  "kacheln": "alle",
+  "bestaetigung": "test"
 }

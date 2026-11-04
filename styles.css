@@ -135,6 +135,29 @@ body.mit-schalter #s-start{--schalter:74px}
 .verlauf .eintrag.mit-quittung{flex-wrap:wrap;row-gap:3px}                                                   /* die Quittung steht in einer eigenen Zeile unter der Nachricht, im selben Kasten */
 .eintrag-quittung{flex:0 0 100%;min-width:0;font-size:14px;line-height:1.3;color:var(--leise);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
 .eintrag-quittung::before{content:"\2713\00a0";color:var(--gruen);font-weight:700}                                          /* der Haken: es ist angekommen */
+/* Die Karte „Bestätigen?“ (Funktion „bestaetigung“): steht im selben Kasten wie die Nachricht, in einer eigenen Zeile darunter */
+.verlauf .eintrag.mit-karte{flex-wrap:wrap;row-gap:6px}
+#s-start:has(#liste-start .eintrag-karte[data-stand="offen"]){--ruhe:440px}
+#s-start:has(#liste-start .eintrag-karte[data-stand="offen"]) .verlauf{flex-flow:column nowrap;overflow-y:auto;overscroll-behavior:contain}   /* …und auf kleinen Handys läuft der Verlauf von oben nach unten und lässt sich scrollen, damit man die Knöpfe immer erreicht */                                   /* wartet eine Karte auf „Stimmt“ oder „Falsch“, bekommt der Verlauf mehr Platz: nur das Mikrofon wird kleiner (und nur, solange die Karte offen ist) */
+.eintrag-karte{flex:0 0 100%;min-width:0;border-top:1px solid var(--linie);padding-top:8px;display:flex;flex-direction:column;gap:6px;font-size:16px;line-height:1.3}
+.eintrag-karte .karte-frage{font-size:17px}
+.eintrag-karte[data-stand="offen"] .karte-frage{color:var(--orange)}
+.eintrag-karte[data-stand="stimmt"] .karte-frage{color:var(--gruen)}
+.eintrag-karte[data-stand="falsch"] .karte-frage{color:var(--rot)}
+.karte-teil{display:flex;flex-direction:column;gap:2px;min-width:0}
+.karte-titel{font-size:16px;overflow-wrap:anywhere}
+.karte-felder{margin:0;display:flex;flex-wrap:wrap;gap:2px 14px}
+.karte-feld{display:flex;gap:5px;min-width:0;max-width:100%}
+.karte-name{margin:0;color:var(--leise)}
+.karte-name::after{content:":"}
+.karte-wert{margin:0;font-weight:700;overflow-wrap:anywhere}
+.karte-feld.fehlt .karte-wert{color:var(--rot);font-style:italic}
+.karte-satz{margin:0;color:var(--leise);overflow-wrap:anywhere}
+.karte-knoepfe{display:flex;gap:16px}
+.karte-knopf{flex:1 1 0;min-height:48px;border-radius:14px;border:2px solid var(--rahmen);background:#fff;font-weight:700;font-size:18px}
+.karte-knopf.karte-stimmt{border-color:var(--gruen);background:var(--gruen);color:#fff}
+.karte-knopf.karte-falsch{border-color:var(--rot);color:var(--rot);background:#fff}
+.karte-knopf:disabled{opacity:.5}
 .verlauf .eintrag-text{flex:1 1 0;min-width:0;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .verlauf .zeit{margin-left:0;flex:none;white-space:nowrap}
 .mini{display:inline-flex;align-items:center;gap:2px;flex:none;font-size:13px;color:var(--leise)}
@@ -251,6 +274,8 @@ body.mit-schalter #s-start{--schalter:74px}
 .rund{width:60px;height:60px;border-radius:50%;background:var(--gruen-hell);display:flex;align-items:center;justify-content:center;color:var(--gruen)}
 .rund svg{width:30px;height:30px}
 
+/* Die Einblendung oben (neue Karte „Bestätigen?“): kurz sichtbar, antippen führt zur Karte */
+.einblendung{position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top));transform:translateX(-50%);background:var(--text);color:#fff;border:0;padding:12px 18px;border-radius:14px;font-size:16px;max-width:calc(100% - 32px);z-index:25;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.25)}
 .meldung{position:fixed;left:50%;bottom:calc(110px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--text);color:#fff;padding:12px 18px;border-radius:14px;font-size:16px;max-width:calc(100% - 32px);z-index:20;text-align:center}
 .code-feld::placeholder{text-transform:none;letter-spacing:normal;font-weight:400}
 
