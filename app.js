@@ -9,6 +9,8 @@ import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBaue
 import { zeichneKarte, einblendungText, WAHL_TEXT } from './js/bestaetigung-ansicht.js';
 import { zeichneReiter, zeichneInhalt, standText } from './js/uebersicht.js';
 import { istBereich, bereichVon, symbol as bereichSymbol, zeichneKacheln } from './js/kacheln.js';
+import { baueScan } from './js/scan-ansicht.js';
+import { istScanBereich } from './js/scanzeilen.js';
 import { zeichnePost, sichtbareFragen, sichtbareDinge } from './js/post-ansicht.js';
 import { FUNKTION as CLOUD, MAX_SEKUNDEN, erkennen, hinweisFuer, wiederholbar, pauseMs, textVerbinden, HINWEIS_LEER, HINWEIS_LAEUFT, HINWEIS_FERTIG } from './js/erkennung.js';
 
@@ -66,6 +68,7 @@ function zeige(id, { verlauf = true } = {}) {
   if (ziel?.dataset.funktion && !funktionAktiv(ziel.dataset.funktion)) id = 's-start';   // Bildschirm einer noch nicht freigegebenen Funktion: nie zeigen
   if (ANZEIGE && geraet?.status === 'frei' && id !== 's-uebersicht' && id !== 's-anzeige-aus') id = anzeigeZiel();
   if (aktuell === 's-aufnahme' && id !== 's-aufnahme' && aufnahme) { aufnahme.abbrechen(); aufnahme = null; }
+  if (aktuell === 's-scan' && id !== 's-scan') scan.schliessen();                  // die Kamera geht aus, sobald man den Scanner verlässt
   $$('.screen').forEach(s => { s.hidden = s.id !== id; });
   aktuell = id;
   if (verlauf) history.pushState({ s: id }, '');
@@ -76,6 +79,7 @@ function zeige(id, { verlauf = true } = {}) {
   if (id === 's-post') { postZeichnen(true); postHolen(); }
   if (id === 's-uebersicht') uebersichtZeichnen();
   if (id === 's-bereich') bereichZeichnen();
+  if (id === 's-scan' && !scan.oeffnen(entwurf.bereich)) id = 's-start';
   if (id === 's-pruefen') bereichAnzeigen();
 }
 window.addEventListener('popstate', e => {
@@ -768,7 +772,7 @@ function funktionAktiv(name) { return funktionSichtbar(funktionen, name, modus);
 function funktionenAnzeigen() {
   funktionenAnwenden(document, funktionen, modus);
   bereichAnzeigen();
-  if (aktuell === 's-uebersicht' || aktuell === 's-bereich') { const ziel = document.getElementById(aktuell); if (ziel && !funktionAktiv(ziel.dataset.funktion)) zeige('s-start'); }
+  if (aktuell === 's-uebersicht' || aktuell === 's-bereich' || aktuell === 's-scan') { const ziel = document.getElementById(aktuell); if (ziel && !funktionAktiv(ziel.dataset.funktion)) zeige('s-start'); }
   if (ANZEIGE && geraet?.status === 'frei' && aktuell !== anzeigeZiel()) zeige(anzeigeZiel(), { verlauf: false });
 }
 let funktionenGeladen = 0;
@@ -928,15 +932,18 @@ async function postAntworten(f, antwort) {
 // schickt ihn zurück (meist nach wenigen Sekunden). Der zuletzt bekannte Stand bleibt im Handy und ist auch ohne Netz da. Es gibt keine ständige Abfrage.
 let ueReiter = 'lager';                // im Anzeige-Modus bleibt es dabei
 let ueSuche = '';
+let ueHofWahl = '';                // das angetippte Gebäude im Reiter „Hof“ (leer = die Kacheln)
 let ueStatus = '';                 // Satz zum letzten Fragen (leer = alles gut)
 let ueFragt = false;
 function uebersichtZeichnen() {
   const kopf = uebersichtFuer(postStand, modus);
   const leiste = $('#ue-reiter');
   const links = leiste.scrollLeft;
-  zeichneReiter(leiste, ueReiter, name => { if (!ANZEIGE) { ueReiter = name; uebersichtZeichnen(); } });
+  const mitHof = funktionAktiv('hof') && !!(kopf && kopf.hof && kopf.hof.karte === 'ok');       // den Reiter „Hof“ gibt es nur mit Freigabe und nur, wenn der Laptop eine Hof-Karte geschickt hat
+  if (ueReiter === 'hof' && !mitHof) ueReiter = 'lager';
+  zeichneReiter(leiste, ueReiter, name => { if (!ANZEIGE) { ueReiter = name; ueHofWahl = ''; uebersichtZeichnen(); } }, mitHof);
   leiste.scrollLeft = links;
-  zeichneInhalt($('#ue-seite'), kopf, ueReiter, ueSuche);
+  zeichneInhalt($('#ue-seite'), kopf, ueReiter, ueSuche, ueHofWahl, id => { ueHofWahl = id; uebersichtZeichnen(); });
   $('#ue-stand').textContent = ueFragt ? 'Frage den Laptop …' : ueStatus ? ueStatus + (kopf ? ' ' + standText(kopf.stand) : '') : kopf ? standText(kopf.stand) : 'Noch kein Stand.';
   $('#b-ue-neu').classList.toggle('dreht', ueFragt);
   $('#b-ue-neu').disabled = ueFragt;
@@ -969,12 +976,13 @@ async function uebersichtAktualisieren() {
 $('#b-uebersicht').addEventListener('click', () => zeige('s-uebersicht'));
 $('#b-zurueck-uebersicht').addEventListener('click', () => history.back());
 $('#b-ue-neu').addEventListener('click', () => uebersichtAktualisieren());
-$('#ue-such').addEventListener('input', e => { ueSuche = e.target.value; zeichneInhalt($('#ue-seite'), uebersichtFuer(postStand, modus), ueReiter, ueSuche); });
+$('#ue-such').addEventListener('input', e => { ueSuche = e.target.value; zeichneInhalt($('#ue-seite'), uebersichtFuer(postStand, modus), ueReiter, ueSuche, ueHofWahl, id => { ueHofWahl = id; uebersichtZeichnen(); }); });
 
 // ---------- Kacheln (Funktion „kacheln“) ----------
 // Eine schmale Zeile über dem Mikrofon; die acht Kacheln stehen auf einem eigenen Bildschirm (auf kleinen Handys ist auf dem Startbildschirm kein Platz dafür).
 // Die gewählte Kachel geht mit der nächsten Nachricht als Feld `bereich` mit; ohne Kachel ist alles wie bisher.
 const kachelnAktiv = () => funktionAktiv('kacheln');
+const scannerAktiv = () => funktionAktiv('scanner') && funktionAktiv('kacheln');
 function bereichAnzeigen() {
   const b = kachelnAktiv() ? bereichVon(entwurf.bereich) : null;
   const knopf = $('#b-bereich');
@@ -987,6 +995,9 @@ function bereichAnzeigen() {
   const p = $('#pruef-bereich');
   p.textContent = b ? 'Bereich: ' + b.name : '';
   p.hidden = !b;
+  const scanKnopf = scannerAktiv() && !!b && istScanBereich(b.wert);                    // „Scannen“ gibt es nur bei Wareneingang, Verkauf und Inventur
+  $('#b-scannen').hidden = !scanKnopf;
+  document.body.classList.toggle('mit-scan', scanKnopf);                                 // styles.css: der Startbildschirm gibt dem Knopf Platz
   startHinweis();
 }
 function bereichZeichnen() {
@@ -1000,6 +1011,22 @@ function bereichZeichnen() {
 $('#b-bereich').addEventListener('click', () => zeige('s-bereich'));
 $('#b-ohne-bereich').addEventListener('click', () => { entwurf.bereich = ''; entwurfMerken(); bereichAnzeigen(); history.back(); });
 $('#b-zurueck-bereich').addEventListener('click', () => history.back());
+
+// ---------- Scannen (Funktion „scanner“) ----------
+// Barcode oder QR-Code lesen, Menge/Charge/MHD eintragen; „Fertig“ macht aus allen Zeilen EINE Nachricht (Prüfen → Senden wie immer, Ende-zu-Ende verschlüsselt).
+// Die Kamera geht erst nach Tippen auf „Scannen“ an; das Bild bleibt im Handy. Artikelnamen kommen aus dem Warenlager der Übersicht (nur Verwalter-Handys).
+const scan = baueScan($('#s-scan'), {
+  liste: () => { const u = uebersichtFuer(postStand, modus); return u && u.tabs && u.tabs.lager && Array.isArray(u.tabs.lager.scan) ? u.tabs.lager.scan : null; },
+  beiFertig: (bereich, text) => {
+    entwurf.bereich = bereich;
+    entwurf.text = [entwurf.text.trim(), text].filter(Boolean).join('\n');
+    scan.leeren();
+    zeigePruefen(true);
+  },
+  beiZurueck: () => history.back(),
+  meldung: t => meldung(t),
+});
+$('#b-scannen').addEventListener('click', () => zeige('s-scan'));
 
 // ---------- Hilfen ----------
 function dauerText(s) { s = Math.round(s || 0); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
@@ -1025,6 +1052,7 @@ window.hofApp = {
   post: { holen: postHolen, stand: () => JSON.parse(JSON.stringify(postStand)), zeichnen: postZeichnen },
   uebersicht: { aktualisieren: uebersichtAktualisieren, fragt: () => ueFragt, status: () => ueStatus },
   bereich: () => entwurf.bereich,
+  scan: { code: t => scan.code(t), zustand: () => scan.zustand(), entwurf: () => ({ text: entwurf.text, bereich: entwurf.bereich }) },
   sprache: { cloudAktiv, pauseBis: () => cloudPauseBis, offen: () => erkennungOffen },
 };
 

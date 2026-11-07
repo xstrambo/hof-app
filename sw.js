@@ -1,9 +1,9 @@
 // Offline-Betrieb: die App-Dateien liegen im Handy, damit sie auch ohne Netz startet.
 // Gesendet wird nur aus der App heraus (Warteschlange), nicht hier.
-const VERSION = 'hof-app-v13';
+const VERSION = 'hof-app-v15';
 const DATEIEN = [
   './', 'index.html', 'styles.css', 'app.js', 'config.js', 'manifest.webmanifest',
-  'js/paket.js', 'js/speicher.js', 'js/briefkasten.js', 'js/sprache.js', 'js/erkennung.js', 'js/wav.js', 'js/modus.js', 'js/funktionen.js', 'js/post.js', 'js/post-ansicht.js', 'js/bestaetigung-ansicht.js', 'js/uebersicht.js', 'js/kacheln.js', 'funktionen.json',
+  'js/paket.js', 'js/speicher.js', 'js/briefkasten.js', 'js/sprache.js', 'js/erkennung.js', 'js/wav.js', 'js/modus.js', 'js/funktionen.js', 'js/post.js', 'js/post-ansicht.js', 'js/bestaetigung-ansicht.js', 'js/uebersicht.js', 'js/hof-ansicht.js', 'js/kacheln.js', 'js/gs1.js', 'js/scanzeilen.js', 'js/scan-daten.js', 'js/scanner.js', 'js/scan-ansicht.js', 'vendor/zxing/zxing.min.js', 'vendor/zxing/LICENSE.txt', 'test/gs1.test.mjs', 'test/scanzeilen.test.mjs', 'test/zxing.test.mjs', 'funktionen.json',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
 ];
 

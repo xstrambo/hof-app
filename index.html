@@ -105,6 +105,10 @@
     <div class="mitte-text">
       <b>Tippen und sprechen</b>
       <span class="leise" id="start-hinweis">Der Text erscheint, während du sprichst.</span>
+      <!-- Scannen (Funktion „scanner“): nur wenn der Bereich Wareneingang, Verkauf oder Inventur gewählt ist -->
+      <button type="button" class="knopf klein scan-start" id="b-scannen" data-funktion="scanner" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10"/></svg>Scannen
+      </button>
     </div>
   </div>
   <form class="leiste" id="f-schnell">
@@ -251,6 +255,9 @@
   <div class="kachel-gitter" id="kachel-gitter"></div>
   <div class="knopf-stapel"><button type="button" class="knopf neben" id="b-ohne-bereich">Ohne Bereich</button></div>
 </section>
+
+<!-- Scannen: Strichcode oder QR-Code lesen, Menge eintragen (Funktion „scanner“); der Inhalt wird von js/scan-ansicht.js gebaut -->
+<section class="screen" id="s-scan" data-funktion="scanner" hidden></section>
 
 <!-- Post: Rückfragen vom Laptop beantworten -->
 <section class="screen" id="s-post" data-funktion="rueckfragen" hidden>

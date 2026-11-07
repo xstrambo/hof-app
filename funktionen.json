@@ -4,8 +4,10 @@
   "aenderungen": "alle",
   "fuer_dich": "alle",
   "quittung": "alle",
-  "sprache_cloud": "test",
+  "sprache_cloud": "alle",
   "uebersicht": "alle",
   "kacheln": "alle",
-  "bestaetigung": "test"
+  "bestaetigung": "alle",
+  "scanner": "alle",
+  "hof": "alle"
 }

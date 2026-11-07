@@ -101,6 +101,7 @@ button{cursor:pointer}
    --fest: alles andere auf dem Bildschirm (Kopf, Abstände, Text unter dem Mikrofon, Eingabeleiste); --schalter: die Zeile Echt | Test (nur, wo es sie gibt). */
 #s-start{--ruhe:143px;--fest:292px;--schalter:0px;--mikro-min:104px}
 body.mit-schalter #s-start{--schalter:74px}
+body.mit-scan #s-start{--fest:352px}                              /* der Knopf „Scannen“ unter dem Mikrofon braucht 60 Pixel mehr (292 + 60) */
 #s-start .mic-ring{flex:0 1 auto;max-height:none;height:clamp(var(--mikro-min), calc(var(--platz) - var(--fest) - var(--schalter) - var(--ruhe) - env(safe-area-inset-top) - env(safe-area-inset-bottom)), 212px)}
 @media (max-width:399px){                                         /* schmale Handys: im Kopf stehen jetzt Post-Zeichen, Personen-Symbol und „Online“ – alles etwas enger, damit der Name Platz hat */
   #s-start .kopf{padding-left:16px;padding-right:12px}
@@ -408,6 +409,43 @@ body.mit-schalter #s-start{--schalter:74px}
 .ue-marke.rot{background:#FBE3E0;color:var(--rot)}
 .ue-marke.gruen{background:var(--gruen-hell);color:var(--gruen)}
 .ue-hinweis,.ue-leer{margin:0;padding:12px 14px;color:var(--leise);font-size:15px;overflow-wrap:anywhere}
+/* Liste aller Maschinen (Reiter „Maschinen“): bei schmalem Handy läuft die Tabelle seitwärts, die Seite selbst nie */
+.ue-maschinen{background:var(--flaeche);border:1px solid var(--linie);border-radius:16px;overflow:hidden}
+.ue-maschinen h2{margin:0;padding:10px 14px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--leise);border-bottom:1px solid var(--linie)}
+.ue-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.ue-mtab{border-collapse:collapse;width:100%;font-size:15px}
+.ue-mtab th{font-size:13px;font-weight:400;color:var(--leise);text-align:left;padding:8px 12px;white-space:nowrap}
+.ue-mtab td{padding:10px 12px;border-top:1px solid var(--linie);vertical-align:top}
+.ue-mtab td.ue-mn{font-weight:700;min-width:9em}
+.ue-mtab td.ue-mzahl{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ue-mtab td.ue-keiner{color:var(--leise);white-space:nowrap}
+
+/* Reiter „Hof“ (Funktion „hof“, A015): Kacheln der Gebäude und die Info-Karte */
+.hof-standort h2{margin:8px 0 8px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--leise)}
+.hof-kacheln{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.hof-kachel{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-height:96px;padding:12px;border-radius:14px;border:1.5px solid var(--rahmen);background:var(--flaeche);color:var(--text);text-align:left;font:inherit;cursor:pointer;min-width:0}
+.hof-kachel.nv{background:transparent;border-style:dashed}
+.hof-kachel.warn{border-color:var(--orange)}
+.hof-kachel.rot{border-color:var(--rot)}
+.hof-k-name{font-weight:700;font-size:16px;overflow-wrap:anywhere}
+.hof-k-rolle{font-size:13px;color:var(--leise);overflow-wrap:anywhere}
+.hof-k-zahl{margin-top:auto;padding-top:6px;font-size:18px;font-weight:700;overflow-wrap:anywhere}
+.hof-kachel.nv .hof-k-zahl{font-size:14px;font-weight:400;color:var(--leise)}
+.hof-info{display:flex;flex-direction:column;gap:12px}
+.hof-info-kopf{display:flex;align-items:center;gap:10px}
+.hof-info-kopf .knopf-icon{flex:none;min-width:44px;min-height:44px;font-size:28px;line-height:1}
+.hof-info-titel{min-width:0}
+.hof-info-titel h2{margin:0;font-size:22px;overflow-wrap:anywhere}
+.hof-rolle{font-size:14px;color:var(--leise)}
+.hof-nv{margin:0;font-size:22px;font-weight:700;color:var(--leise)}
+.hof-kennzahl{background:var(--flaeche);border:1px solid var(--linie);border-radius:14px;padding:12px 14px}
+.hof-kennzahl b{display:block;font-size:30px;line-height:1.15;overflow-wrap:anywhere}
+.hof-kennzahl span{font-size:14px;color:var(--leise)}
+.hof-kennzahl.warn b{color:var(--orange)}
+.hof-kennzahl.rot b{color:var(--rot)}
+.hof-zeile{display:block;font-size:15px;overflow-wrap:anywhere}
+.hof-zeile.gelb{color:var(--warn-text);background:var(--warn-grund)}
+.hof-zeile.rot{color:var(--rot)}
 .ue-hinweis{background:var(--warn-grund);border:1px solid var(--warn-rahmen);border-radius:14px;color:var(--warn-text)}
 
 /* Anzeige-Modus (?anzeige=lager): nur das Warenlager, große Schrift, nur lesen */
@@ -418,6 +456,33 @@ body.mit-schalter #s-start{--schalter:74px}
 .anzeige-lager .ue-zeile{font-size:24px;padding:14px 16px}
 .anzeige-lager .ue-zeile.ue-kopf{font-size:16px}
 .anzeige-lager .ue-klein{font-size:18px}
+.anzeige-lager .ue-mtab{font-size:22px}
+.anzeige-lager .ue-mtab th{font-size:16px}
 .anzeige-lager .ue-marke{font-size:16px}
 .anzeige-lager #s-uebersicht .zurueck-kopf h1{font-size:30px}
 .anzeige-lager .ue-stand{font-size:16px}
+
+/* Scannen (Funktion „scanner“, js/scan-ansicht.js) */
+.scan-start{margin-top:8px;min-height:48px;padding:0 24px;border-color:var(--gruen);border-width:2px;color:var(--gruen)}
+.scan-inhalt{padding:4px 16px 16px;display:flex;flex-direction:column;gap:12px}
+.scan-kamera{position:relative;width:100%;aspect-ratio:4/3;max-height:34dvh;border-radius:18px;background:#111;overflow:hidden;display:none}
+.scan-kamera.an{display:block}
+.scan-video{width:100%;height:100%;object-fit:cover}
+.scan-rahmen{position:absolute;inset:18% 10%;border:3px solid rgba(255,255,255,.85);border-radius:14px;pointer-events:none}
+.scan-status{margin:0;font-size:16px;min-height:1.4em}
+.scan-kamera-knopf{align-self:flex-start}
+.scan-hand{display:flex;gap:8px;align-items:center}
+.scan-hand input{flex:1;min-width:0;height:48px;border-radius:24px;border:1px solid var(--rahmen);background:var(--flaeche);padding:0 16px;font-size:17px}
+.scan-hand .knopf{width:auto;flex:none}
+.scan-karte{display:flex;flex-direction:column;gap:10px;padding:14px}
+.scan-name{font-size:21px;line-height:1.25;overflow-wrap:anywhere}
+.scan-hinweise{display:flex;flex-direction:column;gap:6px}
+.scan-hinweis{margin:0;font-size:15px;padding:8px 10px;border-radius:10px;background:var(--warn-grund);border:1px solid var(--warn-rahmen);color:var(--warn-text)}
+.scan-feld{display:flex;flex-direction:column;gap:4px}
+.scan-etikett{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--leise)}
+.scan-feld input,.scan-feld select{height:52px;border-radius:14px;border:1.5px solid var(--rahmen);background:var(--flaeche);padding:0 14px;font-size:19px;width:100%;min-width:0}
+.scan-menge{display:flex;align-items:center;gap:10px}
+.scan-menge input{flex:1}
+.scan-einheit{font-size:19px;font-weight:700;color:var(--leise);min-width:2ch}
+.scan-zeile{flex-direction:row;align-items:center;justify-content:space-between;gap:10px}
+.scan-zeile-text{font-size:16px;overflow-wrap:anywhere;min-width:0}

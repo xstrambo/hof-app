@@ -1,6 +1,7 @@
 // Die Übersicht (Funktion „uebersicht“): sechs Reiter mit je drei Zahlen und einer Tabelle, ein Suchfeld, „Aktualisieren“.
 // Die Daten kommen als fertiger Stand vom Laptop (js/post.js prüft ihn streng); hier wird nur gezeichnet – ausschließlich mit textContent, nie mit HTML.
 import { UEBERSICHT_TABS } from './post.js';
+import { HOF_REITER, zeichneHof } from './hof-ansicht.js';
 
 export const REITER = {
   lager: { name: 'Warenlager', farbe: '#2e9d6a', icon: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>' },
@@ -50,10 +51,11 @@ export function passt(zeile, suche) {
 }
 
 // Die Reiter-Leiste (Knöpfe). beiWahl(name) wird beim Antippen gerufen.
-export function zeichneReiter(wurzel, aktiv, beiWahl) {
+// mitHof: der Reiter „Hof“ (Funktion „hof“) kommt ans Ende, wenn die Funktion für dieses Handy gilt.
+export function zeichneReiter(wurzel, aktiv, beiWahl, mitHof = false) {
   wurzel.replaceChildren();
-  for (const name of UEBERSICHT_TABS) {
-    const r = REITER[name];
+  for (const name of mitHof ? [...UEBERSICHT_TABS, 'hof'] : UEBERSICHT_TABS) {
+    const r = name === 'hof' ? HOF_REITER : REITER[name];
     const b = el('button', 'ue-reiter' + (name === aktiv ? ' an' : ''));
     b.type = 'button';
     b.dataset.reiter = name;
@@ -66,12 +68,56 @@ export function zeichneReiter(wurzel, aktiv, beiWahl) {
   }
 }
 
+// Die Liste aller Maschinen (Reiter „Maschinen“) als Tabelle: Maschine, Art, Leistung, Besitz, Betrieb, Baujahr, letzter Einsatz. Eine Spalte, zu der keine Maschine
+// etwas weiß, entfällt; ein leeres Feld bleibt leer (nichts wird ergänzt). Nur Text, nie HTML.
+const MASCH_SPALTEN = [['n', 'Maschine', true], ['art', 'Art', false], ['ps', 'Leistung', false], ['besitz', 'Besitz', false], ['betrieb', 'Betrieb', false],
+                       ['bj', 'Baujahr', false], ['letzter', 'Letzter Einsatz', true]];
+export const KEIN_EINSATZ = 'noch kein Einsatz';
+
+export function maschPasst(z, suche) {
+  const s = String(suche || '').trim().toLocaleLowerCase('de');
+  if (!s) return true;
+  const heu = `${z.n} ${z.art} ${z.ps} ${z.besitz} ${z.betrieb} ${z.bj} ${z.letzter}`.toLocaleLowerCase('de');
+  return s.split(/\s+/).every(t => heu.includes(t));
+}
+
+export function zeichneMaschinen(wurzel, liste, suche) {
+  if (!liste || !liste.zeilen.length) return;
+  const treffer = liste.zeilen.filter(z => maschPasst(z, suche));
+  const spalten = MASCH_SPALTEN.filter(([feld, , immer]) => immer || liste.zeilen.some(z => z[feld]));
+  const karte = el('div', 'ue-maschinen');       // eigene Klasse: die Tabelle der letzten Einsätze (.ue-tabelle) bleibt, wie sie war
+  if (liste.titel) karte.append(el('h2', '', liste.titel));
+  const rahmen = el('div', 'ue-scroll');
+  const tabelle = el('table', 'ue-mtab');
+  const kopf = el('tr');
+  for (const [, name] of spalten) kopf.append(el('th', '', name));
+  const thead = el('thead');
+  thead.append(kopf);
+  tabelle.append(thead);
+  const koerper = el('tbody');
+  for (const z of treffer) {
+    const r = el('tr');
+    for (const [feld] of spalten) {
+      const klasse = feld === 'n' ? 'ue-mn' : feld === 'ps' || feld === 'bj' ? 'ue-mzahl' : feld === 'letzter' && z.letzter === KEIN_EINSATZ ? 'ue-keiner' : '';
+      r.append(el('td', klasse, z[feld]));
+    }
+    koerper.append(r);
+  }
+  tabelle.append(koerper);
+  rahmen.append(tabelle);
+  karte.append(rahmen);
+  if (!treffer.length) karte.append(el('p', 'ue-leer', 'Nichts gefunden.'));
+  if (liste.mehr) karte.append(el('p', 'ue-leer', `… und ${liste.mehr} weitere (am Laptop)`));
+  wurzel.append(karte);
+}
+
 // Der Inhalt eines Reiters. kopf = der geprüfte Stand (oder null: noch keiner da).
-export function zeichneInhalt(wurzel, kopf, name, suche) {
+export function zeichneInhalt(wurzel, kopf, name, suche, hofWahl = '', beiHofWahl = () => {}) {
   wurzel.replaceChildren();
+  if (name === 'hof') { zeichneHof(wurzel, kopf && kopf.hof ? kopf.hof : null, hofWahl, suche, beiHofWahl); return; }
   const tab = kopf && kopf.tabs ? kopf.tabs[name] : null;
   if (!tab) { wurzel.append(el('p', 'ue-leer', kopf ? 'Dazu gibt es auf dem Laptop gerade nichts.' : 'Noch kein Stand. Tippe oben auf Aktualisieren.')); return; }
-  if (tab.hinweis && !tab.zahlen.length && !tab.tabelle.zeilen.length) {      // die Quelle fehlt: nur der Hinweis, keine Zahlen
+  if (tab.hinweis && !tab.zahlen.length && !tab.tabelle.zeilen.length && !(tab.liste && tab.liste.zeilen.length)) {      // die Quelle fehlt: nur der Hinweis, keine Zahlen
     wurzel.append(el('p', 'ue-hinweis', tab.hinweis));
     return;
   }
@@ -83,6 +129,7 @@ export function zeichneInhalt(wurzel, kopf, name, suche) {
   }
   if (tab.zahlen.length) wurzel.append(zahlen);
   if (tab.hinweis) wurzel.append(el('p', 'ue-hinweis', tab.hinweis));
+  if (name === 'masch') zeichneMaschinen(wurzel, tab.liste, suche);      // zuerst alle Maschinen, darunter wie bisher die letzten Einsätze
   const t = tab.tabelle;
   const treffer = t.zeilen.filter(z => passt(z, suche));
   const karte = el('div', 'ue-tabelle');

@@ -14,6 +14,7 @@
 //  - Echt und Test sind getrennt: Jede Rückfrage gehört zu einer Instanz, wird mit deren Schlüssel geprüft und nur in deren Modus gezeigt.
 import { entschluesseln, macSchluessel, beglaubigtOeffnen, auspacken, packen, beglaubigen, verschluesseln, L2H, H2L } from './paket.js';
 import { ECHT, TEST, normModus, schluesselFuer } from './modus.js';
+import { scanListe } from './scan-daten.js';
 
 export const STAND_NAME = 'post';
 export const EINGABEN = ['zahl', 'ganzzahl', 'masse', 'text'];
@@ -113,6 +114,66 @@ const ZAHL_TON = ['', 'warn', 'rot'];
 const MARKE_TON = ['gelb', 'rot', 'gruen'];
 const einzeilig = (x, n) => (typeof x === 'string' ? x.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n) : '');
 
+// Die Liste aller Maschinen im Reiter „masch“ (nur Text; leer bleibt leer – nichts wird ergänzt).
+function maschListe(l) {
+  const zeilen = [];
+  for (const r of (Array.isArray(l.zeilen) ? l.zeilen : []).slice(0, UEBERSICHT_MAX_ZEILEN)) {
+    if (!istObjekt(r)) continue;
+    const n = einzeilig(r.n, 80);
+    if (!n) continue;
+    zeilen.push({ n, art: einzeilig(r.art, 30), ps: einzeilig(r.ps, 16), besitz: einzeilig(r.besitz, 50), betrieb: einzeilig(r.betrieb, 40),
+                  bj: einzeilig(r.bj, 4), letzter: einzeilig(r.letzter, 24) });
+  }
+  return { titel: einzeilig(l.titel, 60), zeilen, mehr: Number.isInteger(l.mehr) && l.mehr > 0 && l.mehr < 1e6 ? l.mehr : 0 };
+}
+
+// Die Gebäude-Infos (Funktion „hof“, Auftrag A015): je Standort Gebäude mit Kennzahl und Info-Abschnitten. Streng geprüft und gekürzt, nur Text.
+// Ein Gebäude ohne Verknüpfung trägt keine Abschnitte: dort kommt nie eine Zahl an, nur „noch nicht verknüpft“.
+export const HOF_MAX_STANDORTE = 6;
+export const HOF_MAX_GEBAEUDE = 25;
+export const HOF_MAX_ABSCHNITTE = 8;
+export const HOF_MAX_ZEILEN = 10;
+export const HOF_NICHT_VERKNUEPFT = 'noch nicht verknüpft';
+const HOF_ZEILE_TON = ['', 'gelb', 'rot'];
+const HOF_KARTE = ['ok', 'fehlt', 'kaputt', 'leer'];
+const HOF_ID = /^[a-z0-9][a-z0-9_-]{0,31}$/;
+
+function hofGebaeude(g) {
+  if (!istObjekt(g) || typeof g.id !== 'string' || !HOF_ID.test(g.id)) return null;
+  const name = einzeilig(g.name, 60);
+  if (!name) return null;
+  const verknuepft = g.verknuepft === true && istObjekt(g.ziel) && !!einzeilig(g.ziel.name, 60);
+  const aus = { id: g.id, name, rolle: einzeilig(g.rolle, 30), art: einzeilig(g.art, 12), verknuepft,
+                ziel: verknuepft ? { art: einzeilig(g.ziel.art, 12), name: einzeilig(g.ziel.name, 60) } : null,
+                kennzahl: verknuepft ? einzeilig(g.kennzahl, 24) : HOF_NICHT_VERKNUEPFT, ton: verknuepft && ['warn', 'rot'].includes(g.ton) ? g.ton : '',
+                hinweis: einzeilig(g.hinweis, 240), abschnitte: [] };
+  if (!verknuepft) return aus;                         // ohne Verknüpfung keine Abschnitte und keine Zahl
+  for (const a of (Array.isArray(g.abschnitte) ? g.abschnitte : []).slice(0, HOF_MAX_ABSCHNITTE)) {
+    if (!istObjekt(a)) continue;
+    const titel = einzeilig(a.titel, 60);
+    if (!titel) continue;
+    const zeilen = [];
+    for (const z of (Array.isArray(a.zeilen) ? a.zeilen : []).slice(0, HOF_MAX_ZEILEN)) {
+      if (!istObjekt(z)) continue;
+      const t = einzeilig(z.t, 140);
+      if (t) zeilen.push({ t, ton: HOF_ZEILE_TON.includes(z.ton) ? z.ton : '' });
+    }
+    aus.abschnitte.push({ titel, zeilen, leer: einzeilig(a.leer, 140) });
+  }
+  return aus;
+}
+
+export function hofListe(h) {
+  if (!istObjekt(h) || h.version !== 1) return null;
+  const standorte = [];
+  for (const s of (Array.isArray(h.standorte) ? h.standorte : []).slice(0, HOF_MAX_STANDORTE)) {
+    if (!istObjekt(s) || typeof s.id !== 'string' || !HOF_ID.test(s.id) || !einzeilig(s.name, 60)) continue;
+    const gebaeude = (Array.isArray(s.gebaeude) ? s.gebaeude : []).slice(0, HOF_MAX_GEBAEUDE).map(hofGebaeude).filter(Boolean);
+    standorte.push({ id: s.id, name: einzeilig(s.name, 60), gebaeude, weitere: Number.isInteger(s.weitere) && s.weitere > 0 && s.weitere < 1e6 ? s.weitere : 0 });
+  }
+  return { karte: HOF_KARTE.includes(h.karte) ? h.karte : 'kaputt', hinweis: einzeilig(h.hinweis, 240), standorte };
+}
+
 function uebersichtTab(t) {
   if (!istObjekt(t)) return null;
   const zahlen = (Array.isArray(t.zahlen) ? t.zahlen : []).filter(istObjekt).slice(0, 3)
@@ -127,10 +188,13 @@ function uebersichtTab(t) {
     const m = istObjekt(r.m) && einzeilig(r.m.t, 24) ? { t: einzeilig(r.m.t, 24), ton: MARKE_TON.includes(r.m.ton) ? r.m.ton : 'gelb' } : null;
     zeilen.push({ a, k: einzeilig(r.k, 120), m, z: einzeilig(r.z, 24) });
   }
-  return {
+  const aus = {
     hinweis: einzeilig(t.hinweis, 240), stand: einzeilig(t.stand, 40), zahlen,
     tabelle: { titel: einzeilig(tab.titel, 60), kopf: [einzeilig(kopf[0], 30), einzeilig(kopf[1], 30)], zeilen, mehr: Number.isInteger(tab.mehr) && tab.mehr > 0 && tab.mehr < 1e6 ? tab.mehr : 0 },
   };
+  if (Array.isArray(t.scan)) aus.scan = scanListe(t.scan);       // Artikelliste für den Scanner (nur im Reiter „lager“ vom Laptop gefüllt)
+  if (istObjekt(t.liste)) aus.liste = maschListe(t.liste);         // Liste aller Maschinen (Reiter „masch“, auch ohne Einsätze)
+  return aus;
 }
 
 export function uebersichtKopf(k) {
@@ -141,7 +205,8 @@ export function uebersichtKopf(k) {
   const tabs = {};
   for (const name of UEBERSICHT_TABS) { const t = uebersichtTab(k.tabs[name]); if (t) tabs[name] = t; }
   if (!Object.keys(tabs).length) return null;
-  return { id, frage: typeof k.frage === 'string' && UUID.test(k.frage) ? k.frage : '', stand, gesendet: zeitText(k.gesendet), tabs };
+  const hof = k.hof !== undefined ? hofListe(k.hof) : null;           // Gebäude-Infos (Funktion „hof“); fehlen sie, bleibt alles andere, wie es war
+  return { id, frage: typeof k.frage === 'string' && UUID.test(k.frage) ? k.frage : '', stand, gesendet: zeitText(k.gesendet), tabs, ...(hof ? { hof } : {}) };
 }
 
 function normUebersicht(key, u) {
