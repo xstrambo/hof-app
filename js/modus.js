@@ -33,6 +33,14 @@ export function testErlaubt(config, geraet) {
   return !!geraet && geraet.status === 'frei' && rollen.includes(geraet.rolle);
 }
 
+// A038: Niklas sieht keinen Test-Schalter mehr – die App läuft immer im echten Betrieb. Der Schalter (und damit der Test-Modus) gibt es nur noch,
+// wenn die App von diesem Rechner selbst kommt (localhost / 127.0.0.1 = die Testebene); auf der echten Adresse ist er nie da, auch ein
+// alter gespeicherter Merker „test“ bleibt dort wirkungslos.
+export const TESTEBENE_HOSTS = ['localhost', '127.0.0.1'];
+export function testSchalterErlaubt(config, geraet, host) {
+  return TESTEBENE_HOSTS.includes(host) && testErlaubt(config, geraet);
+}
+
 // Der Modus, der wirklich gilt: der gespeicherte, aber nur wenn dieses Gerät wählen darf.
 export function wirksamerModus(gespeichert, config, geraet) {
   return testErlaubt(config, geraet) ? normModus(gespeichert) : ECHT;

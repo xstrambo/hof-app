@@ -40,7 +40,7 @@ export const DING_ARTEN = ['dokument', 'ergebnis', 'hinweis'];
 export const schluesselVon = (instanz, id) => `${normModus(instanz)}:${id}`;
 
 // ---- Zustand (liegt im Handy, IndexedDB „einstellungen“) --------------------------------------------------------------------
-export function neuerStand() { return { v: 1, fragen: {}, items: {}, dinge: {}, quittungen: {}, uebersicht: {}, bestaetigungen: {} }; }
+export function neuerStand() { return { v: 1, fragen: {}, items: {}, dinge: {}, quittungen: {}, uebersicht: {}, uebersichtGrund: {}, bestaetigungen: {} }; }
 
 const text = (x, n) => (typeof x === 'string' ? x.replace(/\s+/g, ' ').trim().slice(0, n) : '');
 const textMitZeilen = (x, n) => (typeof x === 'string' ? x.replace(/\r/g, '').split('\n').map(z => z.replace(/[ \t]+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, n) : '');
@@ -174,6 +174,27 @@ export function hofListe(h) {
   return { karte: HOF_KARTE.includes(h.karte) ? h.karte : 'kaputt', hinweis: einzeilig(h.hinweis, 240), standorte };
 }
 
+// Die Bestellkarte (Reiter „best“, A040): zu jeder Zeile der Tabelle kann der Laptop Einzelheiten schicken (gleiche Reihenfolge wie die Zeilen). Alles Text, gekürzt;
+// ohne Kunde oder ohne Position gibt es keine Karte. Was der Laptop nicht schickt, steht nicht da – nichts wird ergänzt.
+export const BESTELL_MAX_POSTEN = 20;
+const ZAHLWEGE = ['Kasse', 'Rechnung'];
+export function bestellDetail(x) {
+  if (!istObjekt(x)) return null;
+  const kunde = einzeilig(x.kunde, 80);
+  const pos = [];
+  for (const p of (Array.isArray(x.pos) ? x.pos : []).slice(0, BESTELL_MAX_POSTEN)) {
+    if (!istObjekt(p)) continue;
+    const name = einzeilig(p.p, 80);
+    if (!name) continue;
+    pos.push({ p: name, m: einzeilig(p.m, 24), z: einzeilig(p.z, 60), e: einzeilig(p.e, 16) });
+  }
+  if (!kunde || !pos.length) return null;
+  const aus = { kunde, wann: einzeilig(x.wann, 40), status: einzeilig(x.status, 24), pos, mehr: Number.isInteger(x.mehr) && x.mehr > 0 && x.mehr < 1e6 ? x.mehr : 0 };
+  for (const [feld, n] of [['wunsch', 160], ['notiz', 200], ['herkunft', 30], ['kontakt', 80], ['betrieb', 40], ['vorher', 40]]) { const s = einzeilig(x[feld], n); if (s) aus[feld] = s; }
+  if (ZAHLWEGE.includes(x.zahlweg)) aus.zahlweg = x.zahlweg;
+  return aus;
+}
+
 function uebersichtTab(t) {
   if (!istObjekt(t)) return null;
   const zahlen = (Array.isArray(t.zahlen) ? t.zahlen : []).filter(istObjekt).slice(0, 3)
@@ -181,13 +202,15 @@ function uebersichtTab(t) {
   const tab = istObjekt(t.tabelle) ? t.tabelle : {};
   const kopf = Array.isArray(tab.kopf) ? tab.kopf : [];
   const zeilen = [];
-  for (const r of (Array.isArray(tab.zeilen) ? tab.zeilen : []).slice(0, UEBERSICHT_MAX_ZEILEN)) {
-    if (!istObjekt(r)) continue;
+  const details = Array.isArray(tab.details) ? tab.details : [];
+  (Array.isArray(tab.zeilen) ? tab.zeilen : []).slice(0, UEBERSICHT_MAX_ZEILEN).forEach((r, i) => {
+    if (!istObjekt(r)) return;
     const a = einzeilig(r.a, 80);
-    if (!a) continue;
+    if (!a) return;
     const m = istObjekt(r.m) && einzeilig(r.m.t, 24) ? { t: einzeilig(r.m.t, 24), ton: MARKE_TON.includes(r.m.ton) ? r.m.ton : 'gelb' } : null;
-    zeilen.push({ a, k: einzeilig(r.k, 120), m, z: einzeilig(r.z, 24) });
-  }
+    const d = bestellDetail(details[i]);                          // die Karte zur Zeile (nur Reiter „best“): gleiche Stelle in der Liste der Einzelheiten
+    zeilen.push({ a, k: einzeilig(r.k, 120), m, z: einzeilig(r.z, 24), ...(d ? { d } : {}) });
+  });
   const aus = {
     hinweis: einzeilig(t.hinweis, 240), stand: einzeilig(t.stand, 40), zahlen,
     tabelle: { titel: einzeilig(tab.titel, 60), kopf: [einzeilig(kopf[0], 30), einzeilig(kopf[1], 30)], zeilen, mehr: Number.isInteger(tab.mehr) && tab.mehr > 0 && tab.mehr < 1e6 ? tab.mehr : 0 },
@@ -207,6 +230,21 @@ export function uebersichtKopf(k) {
   if (!Object.keys(tabs).length) return null;
   const hof = k.hof !== undefined ? hofListe(k.hof) : null;           // Gebäude-Infos (Funktion „hof“); fehlen sie, bleibt alles andere, wie es war
   return { id, frage: typeof k.frage === 'string' && UUID.test(k.frage) ? k.frage : '', stand, gesendet: zeitText(k.gesendet), tabs, ...(hof ? { hof } : {}) };
+}
+
+// Der Grund, warum der Laptop keinen Stand schickt (A040): ein kurzer fester Satz, dazu ein Kennwort.
+export function uebersichtGrundKopf(k) {
+  if (!istObjekt(k) || k.art !== 'uebersicht_grund' || k.version !== 1) return null;
+  const id = typeof k.id === 'string' ? k.id : '';
+  const frage = typeof k.frage === 'string' && UUID.test(k.frage) ? k.frage : '';
+  const grund = einzeilig(k.grund, 160);
+  const code = typeof k.code === 'string' && /^[a-z_]{1,20}$/.test(k.code) ? k.code : '';
+  if (!ID_OK.test(id) || !frage || !grund || !code) return null;
+  return { id, frage, code, grund, gesendet: zeitText(k.gesendet) };
+}
+export function uebersichtGrundFuer(stand, instanz) {
+  const g = stand && istObjekt(stand.uebersichtGrund) ? stand.uebersichtGrund[normModus(instanz)] : null;
+  return g && g.kopf ? g.kopf : null;
 }
 
 function normUebersicht(key, u) {
@@ -325,6 +363,13 @@ export function normStand(roh) {
       if (g) aus.uebersicht[k] = g;
     }
   }
+  if (istObjekt(roh.uebersichtGrund)) {
+    for (const [k, u] of Object.entries(roh.uebersichtGrund)) {
+      if ((k !== ECHT && k !== TEST) || !istObjekt(u)) continue;
+      const kopf = uebersichtGrundKopf({ ...u.kopf, art: 'uebersicht_grund', version: 1 });
+      if (kopf) aus.uebersichtGrund[k] = { instanz: k, kopf, gesehen: Number.isFinite(u.gesehen) ? u.gesehen : Date.now() };
+    }
+  }
   if (istObjekt(roh.quittungen)) {
     for (const [k, q] of Object.entries(roh.quittungen)) {
       const g = normQuittung(k, q);
@@ -374,6 +419,13 @@ export function anwenden(stand, instanz, rohKopf, jetzt = Date.now()) {
     if (alt && alt.kopf && alt.kopf.stand > u.stand) return 'alt';                                              // ein älterer Stand nach einem neueren
     stand.uebersicht[instanz] = { instanz, kopf: u, gesehen: jetzt };
     return 'uebersicht';
+  }
+  if (istObjekt(rohKopf) && rohKopf.art === 'uebersicht_grund') {
+    const g = uebersichtGrundKopf(rohKopf);
+    if (!g) return 'ungueltig';
+    if (!istObjekt(stand.uebersichtGrund)) stand.uebersichtGrund = {};
+    stand.uebersichtGrund[instanz] = { instanz, kopf: g, gesehen: jetzt };
+    return 'grund';
   }
   if (istObjekt(rohKopf) && rohKopf.art === 'fuer_dich' && rohKopf.ding === 'quittung') {
     const q = quittungKopf(rohKopf);
@@ -599,8 +651,8 @@ export async function holen({ kasten, geraet, config, privatKey, stand, speicher
       const klar = await beglaubigtOeffnen(await entschluesseln(umschlag, privatKey), mac);
       const { kopf, dateien } = auspacken(klar);
       if (kopf && kopf.ziel === instanz) {
-        if (kopf.art === 'uebersicht') {
-          ergebnis = dateien.length ? 'ungueltig' : anwenden(stand, instanz, { ...kopf, dateien: [] }, jetzt());          // der Stand trägt nie eine Datei
+        if (kopf.art === 'uebersicht' || kopf.art === 'uebersicht_grund') {
+          ergebnis = dateien.length ? 'ungueltig' : anwenden(stand, instanz, { ...kopf, dateien: [] }, jetzt());          // der Stand (und der Grund) trägt nie eine Datei
         } else if (kopf.art === 'fuer_dich' && kopf.ding === 'bestaetigung') {
           ergebnis = dateien.length ? 'ungueltig' : anwenden(stand, instanz, { ...kopf, dateien: [] }, jetzt());       // eine Karte trägt nie eine Datei
         } else if (kopf.art === 'fuer_dich' && kopf.ding === 'quittung') {
@@ -636,7 +688,7 @@ export async function holen({ kasten, geraet, config, privatKey, stand, speicher
     else if (ergebnis === 'ding') erg.dinge++;
     else if (ergebnis === 'quittung') erg.quittungen++;
     else if (ergebnis === 'bestaetigung') erg.bestaetigungen++;
-    else if (ergebnis === 'uebersicht') erg.uebersicht++;
+    else if (ergebnis === 'uebersicht' || ergebnis === 'grund') erg.uebersicht++;
     else if (ergebnis === 'ungueltig' || ergebnis === 'alt') erg.verworfen++;
     await speichern(stand);
     try { await kasten.antwortQuittieren(geraet.token, x.id, test); } catch { /* der Umschlag wird beim nächsten Mal noch einmal quittiert */ }

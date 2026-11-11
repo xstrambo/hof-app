@@ -90,13 +90,13 @@
   <div class="mitte">
     <div class="mic-ring">
       <!-- Zwei kleine Knöpfe links und rechts vom Mikrofon (sie nehmen keinen Platz weg): Bereich wählen (Funktion „kacheln“) und Übersicht (Funktion „uebersicht“) -->
-      <button type="button" class="mic-seite links" id="b-bereich" data-funktion="kacheln" aria-label="Bereich wählen">
-        <span class="mic-seite-rund" id="bereich-symbol"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l9 9-8 8z"/><circle cx="7.5" cy="8.5" r="1.2"/></svg></span>
-        <span class="mic-seite-text">Bereich</span>
-      </button>
       <button type="button" class="mic-seite rechts nur-admin" id="b-uebersicht" data-funktion="uebersicht" aria-label="Übersicht" hidden>
         <span class="mic-seite-rund"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></span>
         <span class="mic-seite-text">Übersicht</span>
+      </button>
+      <button type="button" class="mic-seite links" id="b-bereich" data-funktion="kacheln" aria-label="Bereich wählen">
+        <span class="mic-seite-rund" id="bereich-symbol"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12V4h8l9 9-8 8z"/><circle cx="7.5" cy="8.5" r="1.2"/></svg></span>
+        <span class="mic-seite-text">Bereich</span>
       </button>
       <button type="button" class="mic-knopf" id="b-sprechen" aria-label="Aufnahme starten">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/><path d="M8.5 21h7"/></svg>
@@ -239,6 +239,15 @@
   </div>
 </section>
 
+<!-- Bestellkarte: eine Vorbestellung aus der Übersicht (A040) -->
+<section class="screen" id="s-bestellung" data-funktion="uebersicht" hidden>
+  <div class="zurueck-kopf">
+    <button type="button" class="knopf-icon" id="b-zurueck-bestellung" aria-label="Zurück"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <h1>Bestellung</h1>
+  </div>
+  <div class="best-inhalt" id="bestellung-inhalt"></div>
+</section>
+
 <!-- Anzeige-Modus (?anzeige=lager) ohne Freigabe -->
 <section class="screen" id="s-anzeige-aus" hidden>
   <div class="zurueck-kopf"><h1>Anzeige</h1></div>
@@ -290,6 +299,77 @@
       <label class="blatt-wahl"><input type="file" multiple id="in-dokument" hidden><span class="rund"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/></svg></span>Dokument</label>
     </div>
     <button type="button" class="knopf neben" id="b-blatt-abbrechen">Abbrechen</button>
+  </div>
+</div>
+
+<!-- Hilfe (aus dem Menü „Mehr“) -->
+<section class="screen" id="s-hilfe" hidden>
+  <div class="zurueck-kopf">
+    <button type="button" class="knopf-icon" id="b-zurueck-hilfe" aria-label="Zurück"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <h1>Hilfe</h1>
+  </div>
+  <div class="hilfe-inhalt">
+    <p><b>Sprechen:</b> den grünen Knopf in der Mitte unten antippen und sprechen. Mit „Fertig“ prüfst du den Text und sendest ihn.</p>
+    <p><b>Foto, Scannen, Tippen:</b> den grünen Knopf länger gedrückt halten – dann kannst du ein Foto machen, scannen oder einen Text tippen.</p>
+    <p><b>Übersicht:</b> Lager, Hof und mehr, so wie der Laptop sie zuletzt gemeldet hat.</p>
+    <p><b>Post:</b> Fragen und Sachen für dich. Die rote Zahl sagt, wie viele auf dich warten.</p>
+    <p><b>Mehr:</b> alles Seltenere – Hof-Karte, Scannen, Änderungen, Freigaben und diese Hilfe.</p>
+    <p><b>Zurück:</b> die Zurück-Taste des Handys geht einen Schritt zurück oder schließt das Menü.</p>
+  </div>
+</section>
+
+<!-- Untere Leiste: Start · Übersicht · Sprechen · Post · Mehr (Funktion „untere_leiste“); höchstens fünf Einträge -->
+<nav class="untere-leiste" id="nav" data-funktion="untere_leiste" aria-label="Hauptleiste" hidden>
+  <button type="button" class="nav-punkt" id="nav-start" aria-label="Start">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/></svg><span>Start</span>
+  </button>
+  <button type="button" class="nav-punkt" id="nav-uebersicht" data-funktion="uebersicht" aria-label="Übersicht" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg><span>Übersicht</span>
+  </button>
+  <div class="nav-mitte">
+    <button type="button" class="nav-fab" id="nav-sprechen" aria-label="Sprechen – antippen zum Aufnehmen, gedrückt halten für Foto, Scannen oder Tippen">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/><path d="M8.5 21h7"/></svg>
+    </button>
+    <span class="nav-mitte-text">Sprechen</span>
+  </div>
+  <button type="button" class="nav-punkt" id="nav-post" data-funktion="rueckfragen" aria-label="Post" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg><span>Post</span>
+    <span class="nav-abzeichen" id="nav-abzeichen" hidden>0</span>
+  </button>
+  <button type="button" class="nav-punkt" id="nav-mehr" aria-label="Mehr" aria-haspopup="dialog">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg><span>Mehr</span>
+  </button>
+</nav>
+
+<!-- Menü „Mehr“ -->
+<div class="blatt-huelle" id="mehr" hidden>
+  <button type="button" class="blatt-hinter" id="b-mehr-zu" aria-label="Schließen"></button>
+  <div class="blatt" role="dialog" aria-modal="true" aria-labelledby="mehr-titel">
+    <span class="griff" aria-hidden="true"></span>
+    <b id="mehr-titel" class="blatt-titel">Mehr</b>
+    <div class="mehr-liste">
+      <button type="button" class="mehr-punkt" id="mehr-hof" data-funktion="hof" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20V10l5-4 5 4v10"/><path d="M13 20v-7l4-3 4 3v7"/><path d="M3 20h18"/></svg>Hof-Karte</button>
+      <button type="button" class="mehr-punkt" id="mehr-scanner" data-funktion="scanner" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10"/></svg>Scanner</button>
+      <button type="button" class="mehr-punkt" id="mehr-aenderungen" data-funktion="aenderungen" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Änderungen</button>
+      <button type="button" class="mehr-punkt" id="mehr-freigaben" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M17 8v6M14 11h6"/></svg>Freigaben</button>
+      <button type="button" class="mehr-punkt" id="mehr-hilfe"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 1-1 1.7"/><path d="M12 17v.2"/></svg>Hilfe</button>
+    </div>
+    <button type="button" class="knopf neben" id="b-mehr-abbrechen">Schließen</button>
+  </div>
+</div>
+
+<!-- Sprechknopf lang gedrückt: Foto / Scannen / Tippen -->
+<div class="blatt-huelle" id="fab-blatt" hidden>
+  <button type="button" class="blatt-hinter" id="b-fab-zu" aria-label="Schließen"></button>
+  <div class="blatt" role="dialog" aria-modal="true" aria-labelledby="fab-titel">
+    <span class="griff" aria-hidden="true"></span>
+    <b id="fab-titel" class="blatt-titel">Neue Nachricht</b>
+    <div class="blatt-raster">
+      <button type="button" class="blatt-wahl" id="fab-foto"><span class="rund"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg></span>Foto</button>
+      <button type="button" class="blatt-wahl" id="fab-scannen" data-funktion="scanner" hidden><span class="rund"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10"/></svg></span>Scannen</button>
+      <button type="button" class="blatt-wahl" id="fab-tippen"><span class="rund"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></span>Tippen</button>
+    </div>
+    <button type="button" class="knopf neben" id="b-fab-abbrechen">Abbrechen</button>
   </div>
 </div>
 

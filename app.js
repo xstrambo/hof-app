@@ -3,11 +3,12 @@ import { einstellung, nachrichten, aufraeumen } from './js/speicher.js';
 import { briefkastenFuer, normCode, BriefkastenFehler } from './js/briefkasten.js';
 import { packen, verschluesseln, fotoVerkleinern } from './js/paket.js';
 import { Aufnahme, liveTextMoeglich } from './js/sprache.js';
-import { ECHT, TEST, lesModus, schreibModus, wirksamerModus, testErlaubt, schluesselFuer, zielVon, testBlockiert, TEXTE } from './js/modus.js';
+import { ECHT, TEST, lesModus, schreibModus, normModus, testSchalterErlaubt, schluesselFuer, zielVon, testBlockiert, TEXTE } from './js/modus.js';
 import { ladeFunktionen, sichtbar as funktionSichtbar, anwenden as funktionenAnwenden } from './js/funktionen.js';
-import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon, dateiSchluessel, quittungFuer, uebersichtFuer, uebersichtFrageBauen, bestaetigungFuer, bestaetigungAntwortBauen } from './js/post.js';
+import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon, dateiSchluessel, quittungFuer, uebersichtFuer, uebersichtGrundFuer, uebersichtFrageBauen, bestaetigungFuer, bestaetigungAntwortBauen } from './js/post.js';
 import { zeichneKarte, einblendungText, WAHL_TEXT } from './js/bestaetigung-ansicht.js';
 import { zeichneReiter, zeichneInhalt, standText } from './js/uebersicht.js';
+import { zeichneBestellung } from './js/bestellung-ansicht.js';
 import { istBereich, bereichVon, symbol as bereichSymbol, zeichneKacheln } from './js/kacheln.js';
 import { baueScan } from './js/scan-ansicht.js';
 import { istScanBereich } from './js/scanzeilen.js';
@@ -66,10 +67,12 @@ const anzeigeZiel = () => (funktionAktiv('uebersicht') && geraet?.rolle === 'adm
 function zeige(id, { verlauf = true } = {}) {
   const ziel = document.getElementById(id);
   if (ziel?.dataset.funktion && !funktionAktiv(ziel.dataset.funktion)) id = 's-start';   // Bildschirm einer noch nicht freigegebenen Funktion: nie zeigen
+  if (id === 's-bestellung' && !bestellWahl) id = 's-uebersicht';                          // ohne angetippte Bestellung (z. B. nach dem Neuladen) gibt es keine Karte
   if (ANZEIGE && geraet?.status === 'frei' && id !== 's-uebersicht' && id !== 's-anzeige-aus') id = anzeigeZiel();
   if (aktuell === 's-aufnahme' && id !== 's-aufnahme' && aufnahme) { aufnahme.abbrechen(); aufnahme = null; }
   if (aktuell === 's-scan' && id !== 's-scan') scan.schliessen();                  // die Kamera geht aus, sobald man den Scanner verlässt
   $$('.screen').forEach(s => { s.hidden = s.id !== id; });
+  const vorher = aktuell;
   aktuell = id;
   if (verlauf) history.pushState({ s: id }, '');
   window.scrollTo(0, 0);
@@ -77,13 +80,16 @@ function zeige(id, { verlauf = true } = {}) {
   if (id === 's-start') bereichAnzeigen();                    // zeigt auch den Hinweis (er hängt davon ab, ob die Cloud-Erkennung gerade pausiert) und den gewählten Bereich
   if (id === 's-freigaben') ladeFreigaben();
   if (id === 's-post') { postZeichnen(true); postHolen(); }
-  if (id === 's-uebersicht') uebersichtZeichnen();
+  if (id === 's-uebersicht') { uebersichtZeichnen(); uebersichtAuto(vorher === 's-bestellung' ? 'zurueck' : 'oeffnen'); }              // A040: die Übersicht holt beim Öffnen selbst (nicht beim Zurück von der Bestellkarte)
+  if (id === 's-bestellung') bestellungZeichnen();
   if (id === 's-bereich') bereichZeichnen();
   if (id === 's-scan' && !scan.oeffnen(entwurf.bereich)) id = 's-start';
   if (id === 's-pruefen') bereichAnzeigen();
+  navAnzeigen();
 }
 window.addEventListener('popstate', e => {
   blattZu();
+  blaetterSchliessen();
   const ziel = e.state?.s;
   if (!geraet || geraet.status !== 'frei') return;
   if (ziel && ziel !== 's-zugang' && ziel !== 's-warten') zeige(ziel, { verlauf: false });
@@ -561,7 +567,7 @@ async function zeichneListen() {
 function verlaufZeigen(box, hinweis, liste, jetzt) {
   fuelle(box, liste.filter(n => zielVon(n) === jetzt).slice(0, VERLAUF_MAX));
   const andere = liste.filter(n => zielVon(n) !== jetzt).length;
-  const text = andere && testErlaubt(config, geraet) ? andereText(andere, jetzt) : '';   // wer nicht umschalten darf, hat dort auch nichts
+  const text = andere && testSchalterDa() ? andereText(andere, jetzt) : '';   // wer nicht umschalten darf, hat dort auch nichts
   hinweis.textContent = text; hinweis.hidden = !text;
   hinweis.parentElement.classList.toggle('mit-hinweis', !!text);          // styles.css: mit der Zeile braucht der Verlauf etwas mehr Platz
 }
@@ -729,17 +735,19 @@ $('#b-post-neu').addEventListener('click', () => { postNichtBereitBis = 0; postH
 // ---------- Echt | Test ----------
 // Der Schalter steht auf dem Startbildschirm (nur für Geräte, die ihn sehen dürfen); im Test-Modus liegt ein oranges Band über jedem
 // Bildschirm, und der Sendeknopf ist orange. Der Modus bleibt auf diesem Gerät gemerkt (Standard: Echt).
+// A038: den Schalter gibt es nur in der Testebene (localhost), nie auf der echten Adresse (js/modus.js)
+const testSchalterDa = () => testSchalterErlaubt(config, geraet, location.hostname);
 function modusSetzen(neu, { merken = true } = {}) {
-  modus = wirksamerModus(neu, config, geraet);
-  if (merken && testErlaubt(config, geraet)) schreibModus(modus);
+  modus = testSchalterDa() ? normModus(neu) : ECHT;            // ohne Schalter (die echte Adresse) gilt immer Echt – auch bei einem alten Merker
+  if (merken && testSchalterDa()) schreibModus(modus);
   modusAnzeigen();
 }
 function modusAnzeigen() {
   const test = modus === TEST;
   document.body.classList.toggle('ist-test', test);
   $('#test-banner').hidden = !test;
-  $('#modus-schalter').hidden = !testErlaubt(config, geraet);
-  document.body.classList.toggle('mit-schalter', testErlaubt(config, geraet));       // styles.css: so viel Platz nimmt der Startbildschirm für das Mikrofon ab
+  $('#modus-schalter').hidden = !testSchalterDa();
+  document.body.classList.toggle('mit-schalter', testSchalterDa());       // styles.css: so viel Platz nimmt der Startbildschirm für das Mikrofon ab
   $('#m-echt').setAttribute('aria-pressed', String(!test));
   $('#m-test').setAttribute('aria-pressed', String(test));
   $('#b-senden').classList.toggle('test', test);
@@ -772,7 +780,8 @@ function funktionAktiv(name) { return funktionSichtbar(funktionen, name, modus);
 function funktionenAnzeigen() {
   funktionenAnwenden(document, funktionen, modus);
   bereichAnzeigen();
-  if (aktuell === 's-uebersicht' || aktuell === 's-bereich' || aktuell === 's-scan') { const ziel = document.getElementById(aktuell); if (ziel && !funktionAktiv(ziel.dataset.funktion)) zeige('s-start'); }
+  navAnzeigen();
+  if (aktuell === 's-uebersicht' || aktuell === 's-bestellung' || aktuell === 's-bereich' || aktuell === 's-scan') { const ziel = document.getElementById(aktuell); if (ziel && !funktionAktiv(ziel.dataset.funktion)) zeige('s-start'); }
   if (ANZEIGE && geraet?.status === 'frei' && aktuell !== anzeigeZiel()) zeige(anzeigeZiel(), { verlauf: false });
 }
 let funktionenGeladen = 0;
@@ -849,7 +858,8 @@ function postAnzeigen() {
   const verwalter = geraet?.rolle === 'admin';
   $('#b-post').hidden = !verwalter || !(warten + dinge);                // die Karte nur, wenn etwas wartet …
   $('#b-post-zeichen').hidden = !verwalter || !!(warten + dinge);        // … sonst das kleine Zeichen oben neben dem Personen-Symbol
-  $('#b-uebersicht').hidden = !verwalter;                                // die Übersicht (Funktion „uebersicht“; ohne Freigabe blendet styles.css sie aus)
+  $('#b-uebersicht').hidden = !verwalter;                                // Übersicht neben dem Mikrofon: nur ohne Leiste (mit Leiste blendet styles.css sie aus; ohne Funktion „uebersicht“ ebenso)
+  navAnzeigen();                                                         // Leiste: Eintrag „Post“ und die Zahl der offenen Fragen
   if (aktuell === 's-post') postZeichnen();
 }
 
@@ -935,16 +945,35 @@ let ueSuche = '';
 let ueHofWahl = '';                // das angetippte Gebäude im Reiter „Hof“ (leer = die Kacheln)
 let ueStatus = '';                 // Satz zum letzten Fragen (leer = alles gut)
 let ueFragt = false;
+// A040: Die Übersicht holt selbst. Beim Öffnen fragt die App den Laptop von selbst (nicht öfter als alle 15 Sekunden; der Laptop bremst ohnehin je Handy), beim Wechsel auf einen
+// Reiter nur, wenn der Stand älter als 5 Minuten ist. „Aktualisieren“ bleibt. Kommt nach 60 Sekunden nichts, sagt die App es; kann der Laptop nicht bauen, schickt er den Grund.
+const UE_WARTEN_MS = 60000;
+const UE_ALT_MS = 5 * 60 * 1000;
+const UE_ABSTAND_MS = 15000;
+let ueLetzteFrage = 0;
+let bestellWahl = null;            // die angetippte Bestellung (Einzelheiten vom Laptop) – die Karte „Bestellung“
+const BAU_CODES = ['fehlt', 'zeit', 'fehler', 'format'];          // bei diesen Gründen hat der Laptop gebaut und es ging schief: der Satz bekommt einen Vorspann
+// Wie alt der Stand ist, zählt ab dem Moment, in dem DIESES Handy ihn bekommen hat (nicht nach der Uhr des Laptops: die Uhren beider Geräte müssen nicht übereinstimmen).
+const standAlter = () => { const u = postStand && postStand.uebersicht ? postStand.uebersicht[normModus(modus)] : null; return u && Number.isFinite(u.gesehen) ? Date.now() - u.gesehen : Infinity; };
+function uebersichtAuto(wann) {
+  if (wann === 'zurueck' || ANZEIGE || ueFragt || !geraet || geraet.status !== 'frei' || !postAktiv() || !funktionAktiv('uebersicht')) return;
+  if (Date.now() - ueLetzteFrage < UE_ABSTAND_MS) return;
+  if (wann === 'reiter' && standAlter() < UE_ALT_MS) return;
+  uebersichtAktualisieren();
+}
+function bestellungOeffnen(d) { bestellWahl = d; zeige('s-bestellung'); }
+function bestellungZeichnen() { zeichneBestellung($('#bestellung-inhalt'), bestellWahl); }
 function uebersichtZeichnen() {
   const kopf = uebersichtFuer(postStand, modus);
   const leiste = $('#ue-reiter');
   const links = leiste.scrollLeft;
   const mitHof = funktionAktiv('hof') && !!(kopf && kopf.hof && kopf.hof.karte === 'ok');       // den Reiter „Hof“ gibt es nur mit Freigabe und nur, wenn der Laptop eine Hof-Karte geschickt hat
   if (ueReiter === 'hof' && !mitHof) ueReiter = 'lager';
-  zeichneReiter(leiste, ueReiter, name => { if (!ANZEIGE) { ueReiter = name; ueHofWahl = ''; uebersichtZeichnen(); } }, mitHof);
+  zeichneReiter(leiste, ueReiter, name => { if (!ANZEIGE) { ueReiter = name; ueHofWahl = ''; uebersichtZeichnen(); uebersichtAuto('reiter'); } }, mitHof);
   leiste.scrollLeft = links;
-  zeichneInhalt($('#ue-seite'), kopf, ueReiter, ueSuche, ueHofWahl, id => { ueHofWahl = id; uebersichtZeichnen(); });
-  $('#ue-stand').textContent = ueFragt ? 'Frage den Laptop …' : ueStatus ? ueStatus + (kopf ? ' ' + standText(kopf.stand) : '') : kopf ? standText(kopf.stand) : 'Noch kein Stand.';
+  zeichneInhalt($('#ue-seite'), kopf, ueReiter, ueSuche, ueHofWahl, id => { ueHofWahl = id; uebersichtZeichnen(); }, ANZEIGE ? null : bestellungOeffnen);
+  const stand = kopf ? standText(kopf.stand) : '';
+  $('#ue-stand').textContent = ueFragt ? (kopf ? stand + ' · wird geholt …' : 'Stand wird geholt …') : ueStatus ? ueStatus + (kopf ? ' ' + stand : '') : kopf ? stand : 'Noch kein Stand.';
   $('#b-ue-neu').classList.toggle('dreht', ueFragt);
   $('#b-ue-neu').disabled = ueFragt;
 }
@@ -955,28 +984,30 @@ async function uebersichtAktualisieren() {
   if (!navigator.onLine) { ueStatus = 'Kein Netz – das ist der letzte Stand.'; uebersichtZeichnen(); return; }
   const privatKey = await privaterSchluessel();
   if (!privatKey || !schluesselFuer(config, ziel)) { ueStatus = 'Dieses Handy kann gerade nicht fragen. Bitte Claude Bescheid geben.'; uebersichtZeichnen(); return; }
-  ueFragt = true; ueStatus = ''; uebersichtZeichnen();
+  ueFragt = true; ueStatus = ''; ueLetzteFrage = Date.now(); uebersichtZeichnen();
   try {
     const r = await uebersichtFrageBauen({ instanz: ziel, geraet, config, privatKey });
     await kasten.senden(geraet.token, r.id, new Blob([r.umschlag], { type: 'application/octet-stream' }), ziel);
-    const ende = Date.now() + 30000;
+    const ende = Date.now() + UE_WARTEN_MS;
     while (Date.now() < ende) {
       await new Promise(ok => setTimeout(ok, 1200));
       await postHolen();
       const k = uebersichtFuer(postStand, ziel);
       if (k && k.frage === r.id) { ueStatus = ''; return; }
+      const g = uebersichtGrundFuer(postStand, ziel);                       // der Laptop sagt, warum er keinen Stand schickt
+      if (g && g.frage === r.id) { ueStatus = (BAU_CODES.includes(g.code) ? 'Der Laptop konnte die Übersicht gerade nicht bauen: ' : '') + g.grund; return; }
     }
-    ueStatus = 'Der Laptop hat nicht geantwortet.';
+    ueStatus = 'Der Laptop antwortet nicht – ist er an?';
   } catch (err) {
     const code = err instanceof BriefkastenFehler ? err.code : '';
     ueStatus = testBlockiert(ziel, code) ? TEXTE.testNichtBereit : code === 'netz' ? 'Kein Netz – das ist der letzte Stand.'
       : code === 'bremse' ? 'Bitte kurz warten und noch einmal tippen.' : 'Das Fragen ging nicht.';
   } finally { ueFragt = false; uebersichtZeichnen(); }
 }
-$('#b-uebersicht').addEventListener('click', () => zeige('s-uebersicht'));
 $('#b-zurueck-uebersicht').addEventListener('click', () => history.back());
 $('#b-ue-neu').addEventListener('click', () => uebersichtAktualisieren());
-$('#ue-such').addEventListener('input', e => { ueSuche = e.target.value; zeichneInhalt($('#ue-seite'), uebersichtFuer(postStand, modus), ueReiter, ueSuche, ueHofWahl, id => { ueHofWahl = id; uebersichtZeichnen(); }); });
+$('#ue-such').addEventListener('input', e => { ueSuche = e.target.value; zeichneInhalt($('#ue-seite'), uebersichtFuer(postStand, modus), ueReiter, ueSuche, ueHofWahl, id => { ueHofWahl = id; uebersichtZeichnen(); }, ANZEIGE ? null : bestellungOeffnen); });
+$('#b-zurueck-bestellung').addEventListener('click', () => history.back());
 
 // ---------- Kacheln (Funktion „kacheln“) ----------
 // Eine schmale Zeile über dem Mikrofon; die acht Kacheln stehen auf einem eigenen Bildschirm (auf kleinen Handys ist auf dem Startbildschirm kein Platz dafür).
@@ -1028,6 +1059,109 @@ const scan = baueScan($('#s-scan'), {
 });
 $('#b-scannen').addEventListener('click', () => zeige('s-scan'));
 
+// ---------- Untere Leiste und Menü „Mehr“ (Funktion „untere_leiste“, A038) ----------
+// Start · Übersicht · [Sprechen] · Post · Mehr – höchstens fünf Einträge, fest am unteren Rand. Ein Eintrag, dessen Funktion aus ist (oder den dieses Handy
+// nicht braucht, z. B. Post auf einem Mitglieds-Handy), fehlt. Alles Seltene steht im Menü „Mehr“. Die Zurück-Taste des Handys schließt ein offenes Blatt
+// bzw. geht zum vorigen Reiter (jedes Blatt und jeder Reiter ist ein Eintrag im Verlauf des Browsers).
+const NAV_BILDSCHIRME = ['s-start', 's-uebersicht', 's-bestellung', 's-post', 's-gesendet', 's-hilfe'];       // dort steht die Leiste; beim Sprechen, Prüfen, Scannen usw. nicht
+const NAV_ZIEL = { 's-start': 'nav-start', 's-gesendet': 'nav-start', 's-uebersicht': 'nav-uebersicht', 's-bestellung': 'nav-uebersicht', 's-post': 'nav-post', 's-hilfe': 'nav-mehr' };
+let offenesBlatt = null;              // 'mehr' | 'fab-blatt' | null
+let blattOffenSeit = 0;
+// Die Leiste ist die Oberfläche selbst, keine Vorschau: sie steht nur bei „alle“ (bei „test“ und ohne Eintrag sieht die App aus wie vorher – auch im Test-Modus der Testebene).
+function leisteDa() { return !ANZEIGE && !!geraet && geraet.status === 'frei' && funktionen.untere_leiste === 'alle' && NAV_BILDSCHIRME.includes(aktuell); }
+function navAnzeigen() {
+  const nav = $('#nav'); if (!nav) return;
+  const da = leisteDa();
+  nav.hidden = !da;
+  document.body.classList.toggle('mit-leiste', da);
+  const verwalter = geraet?.rolle === 'admin';
+  $('#nav-uebersicht').hidden = !verwalter;                                  // …und ohne Funktion „uebersicht“ blendet styles.css ihn aus
+  $('#nav-post').hidden = !verwalter;                                        // …ebenso ohne „rueckfragen“
+  const zahl = Number($('#post-zaehler').textContent) || 0;
+  const abz = $('#nav-abzeichen'); abz.textContent = String(zahl); abz.hidden = !zahl;
+  $('#nav-post').setAttribute('aria-label', zahl ? 'Post – ' + zahl + (zahl === 1 ? ' wartet' : ' warten') : 'Post');
+  const aktiv = (offenesBlatt === 'mehr') ? 'nav-mehr' : NAV_ZIEL[aktuell];
+  for (const b of $$('.nav-punkt')) { if (b.id === aktiv) b.setAttribute('aria-current', 'true'); else b.removeAttribute('aria-current'); }
+}
+function blattOeffnen(id) {
+  if (offenesBlatt) return;
+  if (id === 'mehr') mehrZeichnen(); else fabBlattZeichnen();
+  offenesBlatt = id; blattOffenSeit = Date.now();
+  history.pushState({ s: aktuell, blatt: id }, '');
+  $('#' + id).hidden = false;
+  navAnzeigen();
+}
+function blaetterSchliessen() {                // ohne den Verlauf anzufassen (nach „Zurück“ oder bevor man woanders hinführt)
+  offenesBlatt = null;
+  $('#mehr').hidden = true; $('#fab-blatt').hidden = true;
+  navAnzeigen();
+}
+function blattZuMitZurueck() { if (offenesBlatt) history.back(); }          // popstate schließt dann
+// Von der Leiste oder aus dem Menü zu einem Bildschirm: war ein Blatt offen, ersetzt der neue Bildschirm dessen Eintrag im Verlauf (ein Zurück geht dann zum vorigen Reiter).
+function geheZu(id) {
+  const ersetzen = !!offenesBlatt;
+  blaetterSchliessen();
+  if (id === aktuell && !ersetzen) return;
+  zeige(id, { verlauf: !ersetzen });
+  if (ersetzen) history.replaceState({ s: aktuell }, '');
+}
+function mehrZeichnen() {
+  const verwalter = geraet?.rolle === 'admin';
+  $('#mehr-hof').hidden = !(verwalter && funktionAktiv('hof') && funktionAktiv('uebersicht'));
+  $('#mehr-scanner').hidden = !scannerAktiv();
+  $('#mehr-aenderungen').hidden = !(verwalter && funktionAktiv('aenderungen') && funktionAktiv('rueckfragen'));
+  $('#mehr-freigaben').hidden = !verwalter;
+}
+function fabBlattZeichnen() { $('#fab-scannen').hidden = !scannerAktiv(); }
+function scannenOeffnen() {
+  if (!scannerAktiv()) return;
+  if (istScanBereich(entwurf.bereich)) { geheZu('s-scan'); return; }
+  geheZu('s-bereich');
+  meldung('Wähle zuerst den Bereich: Wareneingang, Verkauf oder Inventur.', 5000);
+}
+$('#b-uebersicht').addEventListener('click', () => zeige('s-uebersicht'));
+$('#nav-start').addEventListener('click', () => geheZu('s-start'));
+$('#nav-uebersicht').addEventListener('click', () => geheZu('s-uebersicht'));
+$('#nav-post').addEventListener('click', () => geheZu('s-post'));
+$('#nav-mehr').addEventListener('click', () => { if (offenesBlatt === 'mehr') blattZuMitZurueck(); else blattOeffnen('mehr'); });
+for (const id of ['#b-mehr-zu', '#b-mehr-abbrechen', '#b-fab-zu', '#b-fab-abbrechen']) {
+  $(id).addEventListener('click', () => { if (Date.now() - blattOffenSeit > 400) blattZuMitZurueck(); });          // kurz nach dem Öffnen (Finger noch auf dem Knopf) zählt ein Tippen nicht
+}
+$('#mehr-hof').addEventListener('click', () => {
+  ueReiter = 'hof'; ueHofWahl = '';
+  geheZu('s-uebersicht');
+  if (ueReiter !== 'hof') meldung('Die Hof-Karte ist noch nicht da – in der Übersicht oben auf „Aktualisieren“ tippen.', 6000);
+});
+$('#mehr-scanner').addEventListener('click', scannenOeffnen);
+$('#mehr-aenderungen').addEventListener('click', () => geheZu('s-post'));
+$('#mehr-freigaben').addEventListener('click', () => geheZu('s-freigaben'));
+$('#mehr-hilfe').addEventListener('click', () => geheZu('s-hilfe'));
+$('#b-zurueck-hilfe').addEventListener('click', () => history.back());
+// Sprechknopf in der Mitte: Antippen nimmt sofort auf (wie der große Knopf auf dem Start), langes Drücken öffnet Foto / Scannen / Tippen.
+const FAB_LANG_MS = 550;
+let fabTimer = null, fabLang = false;
+const fab = $('#nav-sprechen');
+fab.addEventListener('pointerdown', () => {
+  fabLang = false; clearTimeout(fabTimer);
+  fabTimer = setTimeout(() => { fabLang = true; blattOeffnen('fab-blatt'); }, FAB_LANG_MS);
+});
+for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) fab.addEventListener(ev, () => clearTimeout(fabTimer));
+fab.addEventListener('contextmenu', e => e.preventDefault());
+fab.addEventListener('click', () => {
+  if (fabLang) { fabLang = false; return; }
+  if (offenesBlatt) return;
+  sprechenStarten(false);
+});
+$('#fab-foto').addEventListener('click', () => { blaetterSchliessen(); history.back(); setTimeout(() => $('#in-kamera').click(), 0); });
+$('#fab-tippen').addEventListener('click', () => {
+  const ersetzen = !!offenesBlatt;
+  blaetterSchliessen();
+  entwurf = { ...neuerEntwurf(), anhaenge: entwurf.anhaenge, text: entwurf.text, bereich: entwurf.bereich };
+  zeigePruefen(false);
+  if (ersetzen) history.replaceState({ s: 's-pruefen' }, '');
+  $('#hof-text').focus();
+});
+$('#fab-scannen').addEventListener('click', scannenOeffnen);
 // ---------- Hilfen ----------
 function dauerText(s) { s = Math.round(s || 0); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
 function zeitText(ms) {
@@ -1050,7 +1184,8 @@ function startHinweis() {
 window.hofApp = {
   postausgang, quittungenHolen, nachrichten, zeichneListen, modus: () => modus, funktion: funktionAktiv, funktionenLaden, funktionen: () => ({ ...funktionen }),
   post: { holen: postHolen, stand: () => JSON.parse(JSON.stringify(postStand)), zeichnen: postZeichnen },
-  uebersicht: { aktualisieren: uebersichtAktualisieren, fragt: () => ueFragt, status: () => ueStatus },
+  uebersicht: { aktualisieren: uebersichtAktualisieren, fragt: () => ueFragt, status: () => ueStatus, bestellung: () => bestellWahl,
+                  gesehenSetzen: ms => { const u = postStand.uebersicht && postStand.uebersicht[normModus(modus)]; if (u) u.gesehen = ms; } },        // (nur für Tests: den Stand „alt“ machen)
   bereich: () => entwurf.bereich,
   scan: { code: t => scan.code(t), zustand: () => scan.zustand(), entwurf: () => ({ text: entwurf.text, bereich: entwurf.bereich }) },
   sprache: { cloudAktiv, pauseBis: () => cloudPauseBis, offen: () => erkennungOffen },

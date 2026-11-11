@@ -111,8 +111,19 @@ export function zeichneMaschinen(wurzel, liste, suche) {
   wurzel.append(karte);
 }
 
-// Der Inhalt eines Reiters. kopf = der geprüfte Stand (oder null: noch keiner da).
-export function zeichneInhalt(wurzel, kopf, name, suche, hofWahl = '', beiHofWahl = () => {}) {
+// Was dasteht, wenn ein Reiter keine Zeilen hat (A040): kein leeres Feld, sondern ein Satz, der sagt, wie etwas hineinkommt. Feste Texte aus diesem Programm.
+export const LEER_TEXT = {
+  lager: 'Im Lager steht noch nichts. Sag z. B. „Wareneingang 40 Rostbratwurst 10er“.',
+  laden: 'Es ist noch kein Verkauf gebucht. Sag z. B. „Verkauft 3 Leberwurst im Glas“.',
+  tier: 'Im Tierbestand steht noch kein Tier. Sag z. B. „40 Ferkel in Stall 2 eingestallt“.',
+  best: 'Es ist noch keine Vorbestellung da. Sag z. B. „Frau Beispiel bestellt 2 kg Hackfleisch für Samstag“.',
+  mittel: 'Bei den Betriebsmitteln steht noch nichts. Sag z. B. „Futterlieferung 5 Tonnen Mastfutter“.',
+  masch: 'Noch keine Einsätze gebucht. Sag z. B. „Deutz 6150 heute 4 Stunden Grubbern“.',
+};
+export const KEINE_MASCHINEN = 'Noch keine Maschinen angelegt – sag z. B. „Neue Maschine Fendt 724, 240 PS“.';
+
+// Der Inhalt eines Reiters. kopf = der geprüfte Stand (oder null: noch keiner da). beiBestellung(d): eine Zeile mit Einzelheiten (Vorbestellungen) wurde angetippt.
+export function zeichneInhalt(wurzel, kopf, name, suche, hofWahl = '', beiHofWahl = () => {}, beiBestellung = null) {
   wurzel.replaceChildren();
   if (name === 'hof') { zeichneHof(wurzel, kopf && kopf.hof ? kopf.hof : null, hofWahl, suche, beiHofWahl); return; }
   const tab = kopf && kopf.tabs ? kopf.tabs[name] : null;
@@ -129,7 +140,10 @@ export function zeichneInhalt(wurzel, kopf, name, suche, hofWahl = '', beiHofWah
   }
   if (tab.zahlen.length) wurzel.append(zahlen);
   if (tab.hinweis) wurzel.append(el('p', 'ue-hinweis', tab.hinweis));
-  if (name === 'masch') zeichneMaschinen(wurzel, tab.liste, suche);      // zuerst alle Maschinen, darunter wie bisher die letzten Einsätze
+  if (name === 'masch') {
+    zeichneMaschinen(wurzel, tab.liste, suche);      // zuerst alle Maschinen, darunter wie bisher die letzten Einsätze
+    if (tab.liste && !tab.liste.zeilen.length) wurzel.append(el('p', 'ue-leer ue-leer-satz', KEINE_MASCHINEN));       // keine Maschine: ein Satz statt nichts
+  }
   const t = tab.tabelle;
   const treffer = t.zeilen.filter(z => passt(z, suche));
   const karte = el('div', 'ue-tabelle');
@@ -140,6 +154,14 @@ export function zeichneInhalt(wurzel, kopf, name, suche, hofWahl = '', beiHofWah
     karte.append(kopfZeile);
     for (const z of treffer) {
       const r = el('div', 'ue-zeile');
+      if (z.d && beiBestellung) {                                   // eine Vorbestellung mit Einzelheiten: antippen öffnet die Karte
+        r.classList.add('ue-oeffnen');
+        r.tabIndex = 0;
+        r.setAttribute('role', 'button');
+        r.setAttribute('aria-label', 'Bestellung von ' + z.a + ' öffnen');
+        r.addEventListener('click', () => beiBestellung(z.d));
+        r.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); beiBestellung(z.d); } });
+      }
       const a = el('span', 'ue-a');
       a.append(el('span', 'ue-name', z.a));
       if (z.k || z.m) {
@@ -148,10 +170,12 @@ export function zeichneInhalt(wurzel, kopf, name, suche, hofWahl = '', beiHofWah
         a.append(klein);
       }
       r.append(a, el('span', 'ue-z', z.z));
+      if (z.d && beiBestellung) r.append(el('span', 'ue-pfeil', '›'));
       karte.append(r);
     }
     if (!treffer.length) karte.append(el('p', 'ue-leer', 'Nichts gefunden.'));
     if (t.mehr) karte.append(el('p', 'ue-leer', `… und ${t.mehr} weitere (am Laptop)`));
   }
   if (t.zeilen.length) wurzel.append(karte);
+  else if (!tab.hinweis && LEER_TEXT[name] && !(name === 'masch' && tab.liste && tab.liste.zeilen.length)) wurzel.append(el('p', 'ue-leer ue-leer-satz', LEER_TEXT[name]));      // keine Zeile und kein Hinweis vom Laptop: ein Satz
 }
