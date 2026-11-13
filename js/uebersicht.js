@@ -2,6 +2,7 @@
 // Die Daten kommen als fertiger Stand vom Laptop (js/post.js prüft ihn streng); hier wird nur gezeichnet – ausschließlich mit textContent, nie mit HTML.
 import { UEBERSICHT_TABS } from './post.js';
 import { HOF_REITER, zeichneHof } from './hof-ansicht.js';
+import { zeichneMaschDetail, zeichneEntfernt } from './karte-ansicht.js';
 
 export const REITER = {
   lager: { name: 'Warenlager', farbe: '#2e9d6a', icon: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>' },
@@ -81,8 +82,9 @@ export function maschPasst(z, suche) {
   return s.split(/\s+/).every(t => heu.includes(t));
 }
 
-export function zeichneMaschinen(wurzel, liste, suche) {
-  if (!liste || !liste.zeilen.length) return;
+export function zeichneMaschinen(wurzel, liste, suche, kk = null) {
+  if (!liste || (!liste.zeilen.length && !(kk && liste.entfernt))) return;
+  if (!liste.zeilen.length) { zeichneEntfernt(wurzel, liste, kk.masch); return; }      // alle entfernt: wenigstens „Wieder aufnehmen“ bleibt
   const treffer = liste.zeilen.filter(z => maschPasst(z, suche));
   const spalten = MASCH_SPALTEN.filter(([feld, , immer]) => immer || liste.zeilen.some(z => z[feld]));
   const karte = el('div', 'ue-maschinen');       // eigene Klasse: die Tabelle der letzten Einsätze (.ue-tabelle) bleibt, wie sie war
@@ -95,8 +97,18 @@ export function zeichneMaschinen(wurzel, liste, suche) {
   thead.append(kopf);
   tabelle.append(thead);
   const koerper = el('tbody');
+  const gewaehlt = kk ? liste.zeilen.find(z => z.i && z.i === kk.masch.wahl) : null;
   for (const z of treffer) {
     const r = el('tr');
+    if (kk && z.i) {                                              // A037: antippen zeigt die Einzelheiten (Umbenennen, Entfernen)
+      r.className = 'ue-oeffnen' + (gewaehlt && gewaehlt.i === z.i ? ' an' : '');
+      r.tabIndex = 0;
+      r.setAttribute('role', 'button');
+      r.setAttribute('aria-label', 'Maschine ' + z.n + ' öffnen');
+      r.dataset.maschine = z.i;
+      r.addEventListener('click', () => kk.masch.waehle(z.i));
+      r.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); kk.masch.waehle(z.i); } });
+    }
     for (const [feld] of spalten) {
       const klasse = feld === 'n' ? 'ue-mn' : feld === 'ps' || feld === 'bj' ? 'ue-mzahl' : feld === 'letzter' && z.letzter === KEIN_EINSATZ ? 'ue-keiner' : '';
       r.append(el('td', klasse, z[feld]));
@@ -108,7 +120,9 @@ export function zeichneMaschinen(wurzel, liste, suche) {
   karte.append(rahmen);
   if (!treffer.length) karte.append(el('p', 'ue-leer', 'Nichts gefunden.'));
   if (liste.mehr) karte.append(el('p', 'ue-leer', `… und ${liste.mehr} weitere (am Laptop)`));
+  if (gewaehlt) zeichneMaschDetail(wurzel, gewaehlt, kk.masch);
   wurzel.append(karte);
+  if (kk) zeichneEntfernt(wurzel, liste, kk.masch);
 }
 
 // Was dasteht, wenn ein Reiter keine Zeilen hat (A040): kein leeres Feld, sondern ein Satz, der sagt, wie etwas hineinkommt. Feste Texte aus diesem Programm.
@@ -123,9 +137,9 @@ export const LEER_TEXT = {
 export const KEINE_MASCHINEN = 'Noch keine Maschinen angelegt – sag z. B. „Neue Maschine Fendt 724, 240 PS“.';
 
 // Der Inhalt eines Reiters. kopf = der geprüfte Stand (oder null: noch keiner da). beiBestellung(d): eine Zeile mit Einzelheiten (Vorbestellungen) wurde angetippt.
-export function zeichneInhalt(wurzel, kopf, name, suche, hofWahl = '', beiHofWahl = () => {}, beiBestellung = null) {
+export function zeichneInhalt(wurzel, kopf, name, suche, hofWahl = '', beiHofWahl = () => {}, beiBestellung = null, kk = null) {
   wurzel.replaceChildren();
-  if (name === 'hof') { zeichneHof(wurzel, kopf && kopf.hof ? kopf.hof : null, hofWahl, suche, beiHofWahl); return; }
+  if (name === 'hof') { zeichneHof(wurzel, kopf && kopf.hof ? kopf.hof : null, hofWahl, suche, beiHofWahl, kk); return; }
   const tab = kopf && kopf.tabs ? kopf.tabs[name] : null;
   if (!tab) { wurzel.append(el('p', 'ue-leer', kopf ? 'Dazu gibt es auf dem Laptop gerade nichts.' : 'Noch kein Stand. Tippe oben auf Aktualisieren.')); return; }
   if (tab.hinweis && !tab.zahlen.length && !tab.tabelle.zeilen.length && !(tab.liste && tab.liste.zeilen.length)) {      // die Quelle fehlt: nur der Hinweis, keine Zahlen
@@ -141,7 +155,7 @@ export function zeichneInhalt(wurzel, kopf, name, suche, hofWahl = '', beiHofWah
   if (tab.zahlen.length) wurzel.append(zahlen);
   if (tab.hinweis) wurzel.append(el('p', 'ue-hinweis', tab.hinweis));
   if (name === 'masch') {
-    zeichneMaschinen(wurzel, tab.liste, suche);      // zuerst alle Maschinen, darunter wie bisher die letzten Einsätze
+    zeichneMaschinen(wurzel, tab.liste, suche, kk);      // zuerst alle Maschinen, darunter wie bisher die letzten Einsätze
     if (tab.liste && !tab.liste.zeilen.length) wurzel.append(el('p', 'ue-leer ue-leer-satz', KEINE_MASCHINEN));       // keine Maschine: ein Satz statt nichts
   }
   const t = tab.tabelle;

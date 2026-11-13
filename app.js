@@ -5,7 +5,7 @@ import { packen, verschluesseln, fotoVerkleinern } from './js/paket.js';
 import { Aufnahme, liveTextMoeglich } from './js/sprache.js';
 import { ECHT, TEST, lesModus, schreibModus, normModus, testSchalterErlaubt, schluesselFuer, zielVon, testBlockiert, TEXTE } from './js/modus.js';
 import { ladeFunktionen, sichtbar as funktionSichtbar, anwenden as funktionenAnwenden } from './js/funktionen.js';
-import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon, dateiSchluessel, quittungFuer, uebersichtFuer, uebersichtGrundFuer, uebersichtFrageBauen, bestaetigungFuer, bestaetigungAntwortBauen } from './js/post.js';
+import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon, dateiSchluessel, quittungFuer, uebersichtFuer, uebersichtGrundFuer, uebersichtFrageBauen, karteAuftragBauen, bestaetigungFuer, bestaetigungAntwortBauen } from './js/post.js';
 import { zeichneKarte, einblendungText, WAHL_TEXT } from './js/bestaetigung-ansicht.js';
 import { zeichneReiter, zeichneInhalt, standText } from './js/uebersicht.js';
 import { zeichneBestellung } from './js/bestellung-ansicht.js';
@@ -971,7 +971,7 @@ function uebersichtZeichnen() {
   if (ueReiter === 'hof' && !mitHof) ueReiter = 'lager';
   zeichneReiter(leiste, ueReiter, name => { if (!ANZEIGE) { ueReiter = name; ueHofWahl = ''; uebersichtZeichnen(); uebersichtAuto('reiter'); } }, mitHof);
   leiste.scrollLeft = links;
-  zeichneInhalt($('#ue-seite'), kopf, ueReiter, ueSuche, ueHofWahl, id => { ueHofWahl = id; uebersichtZeichnen(); }, ANZEIGE ? null : bestellungOeffnen);
+  zeichneInhalt($('#ue-seite'), kopf, ueReiter, ueSuche, ueHofWahl, id => { ueHofWahl = id; uebersichtZeichnen(); }, ANZEIGE ? null : bestellungOeffnen, kartenKontext());
   const stand = kopf ? standText(kopf.stand) : '';
   $('#ue-stand').textContent = ueFragt ? (kopf ? stand + ' · wird geholt …' : 'Stand wird geholt …') : ueStatus ? ueStatus + (kopf ? ' ' + stand : '') : kopf ? stand : 'Noch kein Stand.';
   $('#b-ue-neu').classList.toggle('dreht', ueFragt);
@@ -1004,9 +1004,73 @@ async function uebersichtAktualisieren() {
       : code === 'bremse' ? 'Bitte kurz warten und noch einmal tippen.' : 'Das Fragen ging nicht.';
   } finally { ueFragt = false; uebersichtZeichnen(); }
 }
+// ---------- Die Hof-Karte am Handy bearbeiten (Funktion „hofkarte_bearbeiten“, A037) ----------
+// Dieselbe Hof-Karte wie am Laptop (Reiter „Hof“ in der Übersicht): Namen ändern, Platz setzen, Neues ergänzen, Eigenes ausblenden – und Maschinen antippen,
+// umbenennen, entfernen, wieder aufnehmen. Das Handy schreibt nie selbst: Jede Änderung ist ein kleiner beglaubigter Auftrag an den Laptop (nur Verwalter-Handys);
+// der Laptop prüft, führt aus und schickt den neuen Stand mit dem Ergebnis zurück. Ein Knopf ist gesperrt, solange ein Auftrag unterwegs ist (kein doppeltes Tippen).
+const KARTE_WARTEN_MS = 90000;
+const kz = { ansicht: 'kacheln', standort: '', wahl: '', modus: '', marke: null, laeuft: false, meldung: null, maschWahl: '', maschFrage: '' };
+const karteAktiv = () => !ANZEIGE && !!geraet && geraet.status === 'frei' && geraet.rolle === 'admin' && funktionAktiv('hofkarte_bearbeiten') && funktionAktiv('hof')
+  && funktionAktiv('uebersicht') && funktionAktiv('rueckfragen');
+function kartenKontext() {
+  if (!karteAktiv()) return null;
+  const neu = () => uebersichtZeichnen();
+  return {
+    get ansicht() { return kz.ansicht; }, get standort() { return kz.standort; }, get wahl() { return kz.wahl; }, get modus() { return kz.modus; },        // der Zustand wird bei jedem Zugriff frisch gelesen (der Tipp auf die Karte zeichnet nicht neu)
+    get marke() { return kz.marke; }, get laeuft() { return kz.laeuft; }, get meldung() { return kz.meldung; },
+    setzeAnsicht: a => { kz.ansicht = a; kz.modus = ''; kz.marke = null; kz.meldung = null; neu(); },
+    setzeStandort: id => { kz.standort = id; kz.wahl = ''; kz.modus = ''; kz.marke = null; neu(); },
+    waehle: (id, modus) => { kz.wahl = id; kz.modus = modus || ''; kz.marke = null; kz.meldung = null; neu(); },
+    setzeModus: m => { kz.modus = m; kz.marke = null; kz.meldung = null; neu(); },
+    setzeMarke: (x, y) => { kz.marke = { x, y }; },
+    sende: (aktion, parameter) => karteSenden(aktion, parameter),
+    infos: id => { ueHofWahl = id; neu(); },
+    maschSpringen: id => { kz.maschWahl = id; kz.maschFrage = ''; ueReiter = 'masch'; ueHofWahl = ''; neu(); },
+    masch: { get wahl() { return kz.maschWahl; }, get frage() { return kz.maschFrage; }, get laeuft() { return kz.laeuft; },
+             waehle: id => { kz.maschWahl = id; kz.maschFrage = ''; neu(); }, fragen: id => { kz.maschFrage = id; neu(); }, sende: (a, p) => karteSenden(a, p) },
+  };
+}
+// Schickt einen Auftrag und wartet auf das Ergebnis (der Laptop antwortet mit einem frischen Stand, der die Kennung des Auftrags trägt). Gibt { ok, text } zurück.
+async function karteSenden(aktion, parameter) {
+  if (kz.laeuft) return { ok: false, text: 'Es läuft schon ein Auftrag. Bitte einen Moment warten.' };
+  const fertig = (ok, text) => { kz.meldung = { ok, text }; ueStatus = text; return { ok, text }; };
+  if (!karteAktiv() || !postAktiv()) return fertig(false, 'Dieses Handy darf die Hof-Karte nicht ändern.');
+  const ziel = modus;
+  if (!navigator.onLine) return fertig(false, 'Kein Netz – es wurde nichts geändert.');
+  const privatKey = await privaterSchluessel();
+  if (!privatKey || !schluesselFuer(config, ziel)) return fertig(false, 'Dieses Handy kann gerade nicht senden. Bitte Claude Bescheid geben.');
+  kz.laeuft = true; kz.meldung = null; uebersichtZeichnen();
+  let erg;
+  try {
+    const r = await karteAuftragBauen({ aktion, parameter, instanz: ziel, geraet, config, privatKey });
+    await kasten.senden(geraet.token, r.id, new Blob([r.umschlag], { type: 'application/octet-stream' }), ziel);
+    const ende = Date.now() + KARTE_WARTEN_MS;
+    erg = null;
+    while (Date.now() < ende && !erg) {
+      await new Promise(ok => setTimeout(ok, 1200));
+      await postHolen();
+      const k = uebersichtFuer(postStand, ziel);
+      if (k && k.frage === r.id) erg = k.ergebnis ? { ok: k.ergebnis.ok, text: k.ergebnis.text } : { ok: true, text: 'Erledigt.' };
+      const g = uebersichtGrundFuer(postStand, ziel);
+      if (!erg && g && g.frage === r.id) erg = { ok: true, text: g.grund };
+    }
+    if (!erg) erg = { ok: false, text: 'Der Laptop antwortet nicht – ist er an? Der Auftrag liegt im Briefkasten und wird ausgeführt, sobald der Laptop wieder da ist.' };
+  } catch (err) {
+    const code = err instanceof BriefkastenFehler ? err.code : '';
+    erg = { ok: false, text: testBlockiert(ziel, code) ? TEXTE.testNichtBereit : code === 'netz' ? 'Kein Netz – es wurde nichts geändert.' : code === 'bremse' ? 'Bitte kurz warten und noch einmal tippen.' : 'Das Senden ging nicht.' };
+  } finally { kz.laeuft = false; }
+  if (erg.ok) {
+    if (aktion === 'platz' || aktion === 'neu') { kz.modus = ''; kz.marke = null; if (aktion === 'neu') kz.wahl = ''; }
+    if (aktion === 'maschine_entfernen' || aktion === 'maschine_aufnehmen') { kz.maschFrage = ''; kz.maschWahl = ''; }
+    if (aktion === 'maschine_umbenennen') kz.maschFrage = '';
+  }
+  fertig(erg.ok, erg.text);
+  uebersichtZeichnen();
+  return erg;
+}
 $('#b-zurueck-uebersicht').addEventListener('click', () => history.back());
 $('#b-ue-neu').addEventListener('click', () => uebersichtAktualisieren());
-$('#ue-such').addEventListener('input', e => { ueSuche = e.target.value; zeichneInhalt($('#ue-seite'), uebersichtFuer(postStand, modus), ueReiter, ueSuche, ueHofWahl, id => { ueHofWahl = id; uebersichtZeichnen(); }, ANZEIGE ? null : bestellungOeffnen); });
+$('#ue-such').addEventListener('input', e => { ueSuche = e.target.value; zeichneInhalt($('#ue-seite'), uebersichtFuer(postStand, modus), ueReiter, ueSuche, ueHofWahl, id => { ueHofWahl = id; uebersichtZeichnen(); }, ANZEIGE ? null : bestellungOeffnen, kartenKontext()); });
 $('#b-zurueck-bestellung').addEventListener('click', () => history.back());
 
 // ---------- Kacheln (Funktion „kacheln“) ----------
@@ -1184,6 +1248,7 @@ function startHinweis() {
 window.hofApp = {
   postausgang, quittungenHolen, nachrichten, zeichneListen, modus: () => modus, funktion: funktionAktiv, funktionenLaden, funktionen: () => ({ ...funktionen }),
   post: { holen: postHolen, stand: () => JSON.parse(JSON.stringify(postStand)), zeichnen: postZeichnen },
+  karte: { sende: karteSenden, zustand: () => ({ ...kz }), aktiv: karteAktiv },
   uebersicht: { aktualisieren: uebersichtAktualisieren, fragt: () => ueFragt, status: () => ueStatus, bestellung: () => bestellWahl,
                   gesehenSetzen: ms => { const u = postStand.uebersicht && postStand.uebersicht[normModus(modus)]; if (u) u.gesehen = ms; } },        // (nur für Tests: den Stand „alt“ machen)
   bereich: () => entwurf.bereich,

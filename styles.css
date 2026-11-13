@@ -539,3 +539,44 @@ body.mit-leiste #s-gesendet .knopf-stapel{bottom:calc(var(--nav) + env(safe-area
 .best-felder dt{color:var(--leise);font-size:15px}
 .best-felder dd{margin:0;overflow-wrap:anywhere}
 .hilfe-inhalt p{margin:0}
+
+/* A037: Hof-Karte am Handy (Karte, Platz setzen, Maschinen antippen) */
+.karte-umschalter{display:flex;gap:8px;margin:0 0 10px}
+.karte-umschalter .knopf,.karte-standorte .knopf{min-height:44px}
+.karte-umschalter .knopf.an,.karte-standorte .knopf.an,.karte-liste .knopf.an{background:var(--gruen);color:#fff;border-color:var(--gruen)}
+.karte-standorte{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px}
+.karte-svg{display:block;width:100%;height:auto;max-height:60vh;background:#E3EAD2;border:1px solid var(--linie);border-radius:14px;touch-action:manipulation}
+.karte-svg.tippen{outline:3px dashed var(--gruen);outline-offset:2px}
+.karte-svg .hk{stroke-width:1.5;stroke:#5a4a3a;fill:#c8a98a;cursor:pointer}
+.karte-svg .hk-luft{fill:#c9a98c}
+.karte-svg .hk-osm{fill:#b97b66}
+.karte-svg .hk-eigen{fill:#8fc28a;stroke:#1F6F3F;stroke-width:2.5}
+.karte-svg .hk-leise{fill-opacity:.55}
+.karte-svg .gewaehlt{stroke:#16211B;stroke-width:3.5;stroke-dasharray:6 3}
+.karte-svg .hk-marke{fill:#d0332a;stroke:#fff;stroke-width:2;pointer-events:none}
+.karte-svg .hk-name{fill:#16211B;font-weight:700;paint-order:stroke;stroke:#fff;stroke-width:3;pointer-events:none}
+.karte-legende{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--leise);margin:6px 2px 10px}
+.karte-legende .hk-punkt::before{content:"";display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;background:#c9a98c}
+.karte-legende .hk-punkt.eigen::before{background:#8fc28a;border:2px solid #1F6F3F;box-sizing:border-box}
+.karte-legende .hk-punkt.osm::before{background:#b97b66}
+.karte-tippen{margin:0 0 8px;padding:10px 14px;border-radius:12px;background:var(--gruen-hell);border:1.5px solid var(--gruen);font-weight:700;color:#14391f}
+.karte-meldung{margin:0 0 10px;padding:10px 14px;border-radius:12px;font-weight:700;background:var(--gruen-hell);border:1.5px solid var(--gruen)}
+.karte-meldung.fehler{background:var(--warn-grund);border-color:var(--warn-rahmen);color:var(--warn-text)}
+.karte-panel,.karte-ohne{background:var(--flaeche);border:1px solid var(--linie);border-radius:16px;padding:12px 14px;margin:10px 0;display:flex;flex-direction:column;gap:10px}
+.karte-panel h2,.karte-ohne h2{font-size:19px;margin:0}
+.karte-klein{margin:0;font-size:14px;color:var(--leise)}
+.karte-frage{margin:0;font-size:19px;font-weight:700}
+.karte-zeile{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.karte-zeile .karte-feld{flex:1;min-width:0}
+.karte-feld{min-height:48px;font-size:18px;padding:6px 12px;border:1.5px solid var(--rahmen);border-radius:10px;background:var(--grund);color:var(--text);width:100%;box-sizing:border-box}
+.karte-label{font-weight:700;font-size:15px}
+.karte-mass{display:flex;flex-direction:column;gap:6px}
+.karte-liste{display:flex;flex-wrap:wrap;gap:8px}
+.karte-panel .knopf,.karte-ohne .knopf,.karte-umschalter .knopf,.karte-standorte .knopf,.hof-maschinen .knopf{min-height:48px;padding:0 16px;border-radius:12px;border:1.5px solid var(--rahmen);background:var(--flaeche);color:var(--text);font-size:17px}
+.karte-panel .knopf.haupt,.karte-ohne .knopf.haupt{background:var(--gruen);border-color:var(--gruen);color:#fff;font-weight:700}
+.karte-panel .knopf:disabled,.karte-ohne .knopf:disabled{opacity:.5}
+.ue-mtab tr.ue-oeffnen{cursor:pointer}
+.ue-mtab tr.ue-oeffnen.an td{background:var(--gruen-hell)}
+.hof-maschinen{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.karte-umschalter .knopf,.karte-standorte .knopf{width:auto;flex:1}
+.karte-panel .knopf,.karte-ohne .knopf,.hof-maschinen .knopf{width:auto}

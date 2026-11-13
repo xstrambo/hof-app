@@ -112,6 +112,7 @@ export const UEBERSICHT_TABS = ['lager', 'laden', 'tier', 'best', 'mittel', 'mas
 export const UEBERSICHT_MAX_ZEILEN = 150;
 const ZAHL_TON = ['', 'warn', 'rot'];
 const MARKE_TON = ['gelb', 'rot', 'gruen'];
+const MASCH_ID = /^MA-\d{1,6}$/;
 const einzeilig = (x, n) => (typeof x === 'string' ? x.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n) : '');
 
 // Die Liste aller Maschinen im Reiter „masch“ (nur Text; leer bleibt leer – nichts wird ergänzt).
@@ -121,10 +122,17 @@ function maschListe(l) {
     if (!istObjekt(r)) continue;
     const n = einzeilig(r.n, 80);
     if (!n) continue;
-    zeilen.push({ n, art: einzeilig(r.art, 30), ps: einzeilig(r.ps, 16), besitz: einzeilig(r.besitz, 50), betrieb: einzeilig(r.betrieb, 40),
+    const i = typeof r.i === 'string' && MASCH_ID.test(r.i) ? r.i : '';                  // Kennung der Maschine (A037): ohne sie lässt sich die Zeile nicht antippen
+    zeilen.push({ ...(i ? { i } : {}), n, art: einzeilig(r.art, 30), ps: einzeilig(r.ps, 16), besitz: einzeilig(r.besitz, 50), betrieb: einzeilig(r.betrieb, 40),
                   bj: einzeilig(r.bj, 4), letzter: einzeilig(r.letzter, 24) });
   }
-  return { titel: einzeilig(l.titel, 60), zeilen, mehr: Number.isInteger(l.mehr) && l.mehr > 0 && l.mehr < 1e6 ? l.mehr : 0 };
+  const entfernt = [];
+  for (const r of (Array.isArray(l.entfernt) ? l.entfernt : []).slice(0, UEBERSICHT_MAX_ZEILEN)) {
+    if (!istObjekt(r) || typeof r.i !== 'string' || !MASCH_ID.test(r.i)) continue;
+    const n = einzeilig(r.n, 80);
+    if (n) entfernt.push({ i: r.i, n, wann: einzeilig(r.wann, 10) });
+  }
+  return { titel: einzeilig(l.titel, 60), zeilen, mehr: Number.isInteger(l.mehr) && l.mehr > 0 && l.mehr < 1e6 ? l.mehr : 0, ...(entfernt.length ? { entfernt } : {}) };
 }
 
 // Die Gebäude-Infos (Funktion „hof“, Auftrag A015): je Standort Gebäude mit Kennzahl und Info-Abschnitten. Streng geprüft und gekürzt, nur Text.
@@ -160,7 +168,54 @@ function hofGebaeude(g) {
     }
     aus.abschnitte.push({ titel, zeilen, leer: einzeilig(a.leer, 140) });
   }
+  if (Array.isArray(g.maschinen)) {                                  // Maschinen der Halle zum Antippen (A037)
+    aus.maschinen = g.maschinen.slice(0, 12).filter(m => istObjekt(m) && typeof m.id === 'string' && MASCH_ID.test(m.id) && einzeilig(m.n, 60)).map(m => ({ id: m.id, n: einzeilig(m.n, 60) }));
+  }
   return aus;
+}
+
+// Die Karte fürs Handy (A037, Funktion „hofkarte_bearbeiten“): Umrisse und Plätze in Metern, dazu die Objekte ohne Platz und die ausgeblendeten. Alles streng geprüft und
+// gekürzt; Zahlen bleiben Zahlen, Namen Text. Was nicht passt, fällt weg.
+export const PLAN_MAX_OBJEKTE = 120;
+export const PLAN_MAX_PUNKTE = 40;
+const PLAN_PLATZ = ['osm', 'luftbild', 'eigen'];
+const meter = x => (typeof x === 'number' && Number.isFinite(x) && Math.abs(x) <= 3000 ? x : null);
+const punkt = p => (Array.isArray(p) && p.length === 2 && meter(p[0]) !== null && meter(p[1]) !== null ? [p[0], p[1]] : null);
+
+function planObjekt(o) {
+  if (!istObjekt(o) || typeof o.id !== 'string' || !HOF_ID.test(o.id)) return null;
+  const name = einzeilig(o.name, 60);
+  if (!name) return null;
+  const aus = { id: o.id, name, rolle: einzeilig(o.rolle, 30), platz: PLAN_PLATZ.includes(o.platz) ? o.platz : 'luftbild', eigen: o.eigen === true, neu: o.neu === true, seit: einzeilig(o.seit, 10) };
+  if (o.form === 'kreis') {
+    const m = punkt(o.mitte);
+    if (!m || typeof o.d !== 'number' || !(o.d >= 0.5 && o.d <= 80)) return null;
+    return { ...aus, form: 'kreis', mitte: m, d: o.d };
+  }
+  if (o.form === 'poly') {
+    const pts = (Array.isArray(o.pts) ? o.pts : []).slice(0, PLAN_MAX_PUNKTE).map(punkt);
+    if (pts.length < 3 || pts.some(p => !p)) return null;
+    return { ...aus, form: 'poly', pts };
+  }
+  return null;
+}
+
+function planOhne(o) {
+  if (!istObjekt(o) || typeof o.id !== 'string' || !HOF_ID.test(o.id)) return null;
+  const name = einzeilig(o.name, 60);
+  if (!name) return null;
+  const v = istObjekt(o.vorschlag) ? o.vorschlag : {};
+  const gut = (x, a, b) => (typeof x === 'number' && x >= a && x <= b ? x : null);
+  return { id: o.id, name, rolle: einzeilig(o.rolle, 30), rund: o.rund === true, vorschlag: { d: gut(v.d, 0.5, 80), b: gut(v.b, 1, 200), t: gut(v.t, 1, 200), woher: einzeilig(v.woher, 80) } };
+}
+
+export function hofPlan(p) {
+  if (!istObjekt(p)) return null;
+  const objekte = (Array.isArray(p.objekte) ? p.objekte : []).slice(0, PLAN_MAX_OBJEKTE).map(planObjekt).filter(Boolean);
+  const ohne = (Array.isArray(p.ohne_platz) ? p.ohne_platz : []).slice(0, 60).map(planOhne).filter(Boolean);
+  const weg = (Array.isArray(p.ausgeblendet) ? p.ausgeblendet : []).slice(0, 30)
+    .filter(a => istObjekt(a) && typeof a.id === 'string' && HOF_ID.test(a.id) && einzeilig(a.name, 60)).map(a => ({ id: a.id, name: einzeilig(a.name, 60) }));
+  return { objekte, ohne_platz: ohne, ausgeblendet: weg };
 }
 
 export function hofListe(h) {
@@ -169,7 +224,8 @@ export function hofListe(h) {
   for (const s of (Array.isArray(h.standorte) ? h.standorte : []).slice(0, HOF_MAX_STANDORTE)) {
     if (!istObjekt(s) || typeof s.id !== 'string' || !HOF_ID.test(s.id) || !einzeilig(s.name, 60)) continue;
     const gebaeude = (Array.isArray(s.gebaeude) ? s.gebaeude : []).slice(0, HOF_MAX_GEBAEUDE).map(hofGebaeude).filter(Boolean);
-    standorte.push({ id: s.id, name: einzeilig(s.name, 60), gebaeude, weitere: Number.isInteger(s.weitere) && s.weitere > 0 && s.weitere < 1e6 ? s.weitere : 0 });
+    const plan = s.plan !== undefined ? hofPlan(s.plan) : null;
+    standorte.push({ id: s.id, name: einzeilig(s.name, 60), gebaeude, weitere: Number.isInteger(s.weitere) && s.weitere > 0 && s.weitere < 1e6 ? s.weitere : 0, ...(plan ? { plan } : {}) });
   }
   return { karte: HOF_KARTE.includes(h.karte) ? h.karte : 'kaputt', hinweis: einzeilig(h.hinweis, 240), standorte };
 }
@@ -229,7 +285,8 @@ export function uebersichtKopf(k) {
   for (const name of UEBERSICHT_TABS) { const t = uebersichtTab(k.tabs[name]); if (t) tabs[name] = t; }
   if (!Object.keys(tabs).length) return null;
   const hof = k.hof !== undefined ? hofListe(k.hof) : null;           // Gebäude-Infos (Funktion „hof“); fehlen sie, bleibt alles andere, wie es war
-  return { id, frage: typeof k.frage === 'string' && UUID.test(k.frage) ? k.frage : '', stand, gesendet: zeitText(k.gesendet), tabs, ...(hof ? { hof } : {}) };
+  const ergebnis = istObjekt(k.ergebnis) && typeof k.ergebnis.ok === 'boolean' && einzeilig(k.ergebnis.text, 200) ? { ok: k.ergebnis.ok, text: einzeilig(k.ergebnis.text, 200) } : null;      // das Ergebnis eines Auftrags (A037)
+  return { id, frage: typeof k.frage === 'string' && UUID.test(k.frage) ? k.frage : '', stand, gesendet: zeitText(k.gesendet), tabs, ...(hof ? { hof } : {}), ...(ergebnis ? { ergebnis } : {}) };
 }
 
 // Der Grund, warum der Laptop keinen Stand schickt (A040): ein kurzer fester Satz, dazu ein Kennwort.
@@ -595,6 +652,22 @@ export async function uebersichtFrageBauen({ instanz, geraet, config, privatKey,
   const laptop = schluesselFuer(config, instanz);
   if (!laptop) throw new Error('kein Schlüssel');
   const kopf = { art: 'uebersicht_frage', id: crypto.randomUUID(), ziel: instanz, von: geraet.name, geraet: geraet.id, erstellt: jetzt.toISOString() };
+  const mac = await macSchluessel(privatKey, laptop, H2L);
+  const klar = await packen(kopf, []);
+  return { id: kopf.id, umschlag: await verschluesseln(await beglaubigen(klar, mac), laptop), instanz };
+}
+
+// ---- Die Hof-Karte am Handy bearbeiten (Funktion „hofkarte_bearbeiten“, A037) ------------------------------------------------------
+// Eine kleine beglaubigte Nachricht (Art „karte_auftrag“: eine Aktion und ein paar Angaben). Das Handy schreibt nie selbst; der Laptop prüft, führt aus und schickt
+// den neuen Stand mit dem Ergebnis zurück (Antwort mit `frage` = Kennung des Auftrags). Sie geht NICHT durch die Warteschlange (ein Auftrag von gestern soll nicht später
+// etwas verändern), sondern gleich in den Briefkasten.
+export const KARTE_AKTIONEN = ['name', 'platz', 'neu', 'ausblenden', 'einblenden', 'maschine_umbenennen', 'maschine_entfernen', 'maschine_aufnehmen'];
+export async function karteAuftragBauen({ aktion, parameter, instanz, geraet, config, privatKey, jetzt = new Date() }) {
+  if (!KARTE_AKTIONEN.includes(aktion) || !istObjekt(parameter)) throw new Error('Aktion gibt es nicht');
+  instanz = normModus(instanz);
+  const laptop = schluesselFuer(config, instanz);
+  if (!laptop) throw new Error('kein Schlüssel');
+  const kopf = { art: 'karte_auftrag', id: crypto.randomUUID(), aktion, parameter, ziel: instanz, von: geraet.name, geraet: geraet.id, erstellt: jetzt.toISOString() };
   const mac = await macSchluessel(privatKey, laptop, H2L);
   const klar = await packen(kopf, []);
   return { id: kopf.id, umschlag: await verschluesseln(await beglaubigen(klar, mac), laptop), instanz };

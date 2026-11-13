@@ -2,6 +2,7 @@
 // Antippen zeigt die Info-Karte. Die Daten kommen vom Laptop (js/post.js prüft sie streng); hier wird nur gezeichnet – ausschließlich mit textContent.
 // Verknüpft wird am Laptop (Zentrale, Hof-Karte): Ohne Verknüpfung steht „noch nicht verknüpft“, nie eine Zahl.
 import { HOF_NICHT_VERKNUEPFT } from './post.js';
+import { zeichneKarte } from './karte-ansicht.js';
 
 export const HOF_ICON = '<path d="M3 11 12 4l9 7v9H3z"/><path d="M9 20v-6h6v6"/>';
 export const HOF_REITER = { name: 'Hof', farbe: '#8a6d2b', icon: HOF_ICON };
@@ -28,7 +29,7 @@ export function hofFinden(hof, id) {
   return null;
 }
 
-function karteZeichnen(wurzel, g, zurueck) {
+function karteZeichnen(wurzel, g, zurueck, karte = null) {
   const k = el('div', 'hof-info');
   const kopf = el('div', 'hof-info-kopf');
   const b = el('button', 'knopf-icon');
@@ -49,6 +50,18 @@ function karteZeichnen(wurzel, g, zurueck) {
   const zahl = el('div', 'hof-kennzahl' + (g.ton ? ' ' + g.ton : ''));
   zahl.append(el('b', '', g.kennzahl), el('span', '', g.ziel ? `verknüpft mit ${g.ziel.name}` : ''));
   k.append(zahl);
+  if (karte && g.maschinen && g.maschinen.length) {                  // A037: die Maschinen der Halle zum Antippen (Einzelheiten, Umbenennen, Entfernen)
+    const m = el('div', 'ue-tabelle hof-abschnitt hof-maschinen');
+    m.append(el('h2', '', 'Maschine antippen'));
+    for (const x of g.maschinen) {
+      const b = el('button', 'knopf klein', x.n);
+      b.type = 'button';
+      b.dataset.maschine = x.id;
+      b.addEventListener('click', () => karte.maschSpringen(x.id));
+      m.append(b);
+    }
+    k.append(m);
+  }
   for (const a of g.abschnitte) {
     const box = el('div', 'ue-tabelle hof-abschnitt');
     box.append(el('h2', '', a.titel));
@@ -63,12 +76,25 @@ function karteZeichnen(wurzel, g, zurueck) {
 }
 
 // hof = geprüfte Gebäude-Infos (oder null: der Laptop hat keine geschickt). wahl = Kennung des angetippten Gebäudes (oder ''). beiWahl(id) beim Antippen.
-export function zeichneHof(wurzel, hof, wahl, suche, beiWahl) {
+export function zeichneHof(wurzel, hof, wahl, suche, beiWahl, karte = null) {
   wurzel.replaceChildren();
   if (!hof) { wurzel.append(el('p', 'ue-leer', 'Noch keine Gebäude-Infos. Tippe oben auf Aktualisieren.')); return; }
   if (hof.karte !== 'ok') { wurzel.append(el('p', 'ue-hinweis', hof.hinweis || 'Auf dem Laptop gibt es noch keine Hof-Karte.')); return; }
   const treffer = hofFinden(hof, wahl);
-  if (treffer) { karteZeichnen(wurzel, treffer.gebaeude, () => beiWahl('')); return; }
+  if (treffer) { karteZeichnen(wurzel, treffer.gebaeude, () => beiWahl(''), karte); return; }
+  const hatPlan = !!karte && hof.standorte.some(s => s.plan);
+  if (hatPlan) {                                                       // A037: dieselbe Hof-Karte wie am Laptop, zum Bearbeiten (nur Verwalter-Handys mit der Funktion)
+    const umschalter = el('div', 'karte-umschalter');
+    for (const [wert, text] of [['kacheln', 'Gebäude'], ['karte', 'Karte']]) {
+      const b = el('button', 'knopf klein' + (karte.ansicht === wert ? ' an' : ''), text);
+      b.type = 'button';
+      b.dataset.ansicht = wert;
+      b.addEventListener('click', () => karte.setzeAnsicht(wert));
+      umschalter.append(b);
+    }
+    wurzel.append(umschalter);
+    if (karte.ansicht === 'karte') { zeichneKarte(wurzel, hof, karte); return; }
+  }
   if (hof.hinweis) wurzel.append(el('p', 'ue-hinweis', hof.hinweis));
   for (const s of hof.standorte) {
     const liste = s.gebaeude.filter(g => hofPasst(g, suche));
