@@ -1009,7 +1009,7 @@ async function uebersichtAktualisieren() {
 // umbenennen, entfernen, wieder aufnehmen. Das Handy schreibt nie selbst: Jede Änderung ist ein kleiner beglaubigter Auftrag an den Laptop (nur Verwalter-Handys);
 // der Laptop prüft, führt aus und schickt den neuen Stand mit dem Ergebnis zurück. Ein Knopf ist gesperrt, solange ein Auftrag unterwegs ist (kein doppeltes Tippen).
 const KARTE_WARTEN_MS = 90000;
-const kz = { ansicht: 'kacheln', standort: '', wahl: '', modus: '', marke: null, laeuft: false, meldung: null, maschWahl: '', maschFrage: '' };
+const kz = { ansicht: 'kacheln', standort: '', fenster: null, wahl: '', modus: '', marke: null, laeuft: false, meldung: null, maschWahl: '', maschFrage: '' };
 const karteAktiv = () => !ANZEIGE && !!geraet && geraet.status === 'frei' && geraet.rolle === 'admin' && funktionAktiv('hofkarte_bearbeiten') && funktionAktiv('hof')
   && funktionAktiv('uebersicht') && funktionAktiv('rueckfragen');
 function kartenKontext() {
@@ -1018,11 +1018,12 @@ function kartenKontext() {
   return {
     get ansicht() { return kz.ansicht; }, get standort() { return kz.standort; }, get wahl() { return kz.wahl; }, get modus() { return kz.modus; },        // der Zustand wird bei jedem Zugriff frisch gelesen (der Tipp auf die Karte zeichnet nicht neu)
     get marke() { return kz.marke; }, get laeuft() { return kz.laeuft; }, get meldung() { return kz.meldung; },
+    get fenster() { return kz.fenster; }, setzeFenster: f => { kz.fenster = f; },                        // A050: Ausschnitt der gemeinsamen Karte (verschieben, zoomen); bleibt beim Neuzeichnen
     setzeAnsicht: a => { kz.ansicht = a; kz.modus = ''; kz.marke = null; kz.meldung = null; neu(); },
-    setzeStandort: id => { kz.standort = id; kz.wahl = ''; kz.modus = ''; kz.marke = null; neu(); },
+    setzeStandort: id => { kz.standort = id; kz.fenster = null; kz.wahl = ''; kz.modus = ''; kz.marke = null; neu(); },
     waehle: (id, modus) => { kz.wahl = id; kz.modus = modus || ''; kz.marke = null; kz.meldung = null; neu(); },
     setzeModus: m => { kz.modus = m; kz.marke = null; kz.meldung = null; neu(); },
-    setzeMarke: (x, y) => { kz.marke = { x, y }; },
+    setzeMarke: (x, y, standort) => { kz.marke = { x, y, standort: standort || '' }; },
     sende: (aktion, parameter) => karteSenden(aktion, parameter),
     infos: id => { ueHofWahl = id; neu(); },
     maschSpringen: id => { kz.maschWahl = id; kz.maschFrage = ''; ueReiter = 'masch'; ueHofWahl = ''; neu(); },

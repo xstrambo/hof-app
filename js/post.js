@@ -178,7 +178,7 @@ function hofGebaeude(g) {
 // gekürzt; Zahlen bleiben Zahlen, Namen Text. Was nicht passt, fällt weg.
 export const PLAN_MAX_OBJEKTE = 120;
 export const PLAN_MAX_PUNKTE = 40;
-const PLAN_PLATZ = ['osm', 'luftbild', 'eigen'];
+const PLAN_PLATZ = ['osm', 'luftbild', 'skizze', 'schema', 'eigen'];       // skizze = nach Skizze von Niklas geschätzt, schema = Lage und Form nicht echt (A050)
 const meter = x => (typeof x === 'number' && Number.isFinite(x) && Math.abs(x) <= 3000 ? x : null);
 const punkt = p => (Array.isArray(p) && p.length === 2 && meter(p[0]) !== null && meter(p[1]) !== null ? [p[0], p[1]] : null);
 
@@ -186,7 +186,8 @@ function planObjekt(o) {
   if (!istObjekt(o) || typeof o.id !== 'string' || !HOF_ID.test(o.id)) return null;
   const name = einzeilig(o.name, 60);
   if (!name) return null;
-  const aus = { id: o.id, name, rolle: einzeilig(o.rolle, 30), platz: PLAN_PLATZ.includes(o.platz) ? o.platz : 'luftbild', eigen: o.eigen === true, neu: o.neu === true, seit: einzeilig(o.seit, 10) };
+  const aus = { id: o.id, name, rolle: einzeilig(o.rolle, 30), platz: PLAN_PLATZ.includes(o.platz) ? o.platz : 'luftbild', eigen: o.eigen === true, neu: o.neu === true, seit: einzeilig(o.seit, 10),
+                bild: typeof o.bild === 'string' && o.bild.length <= 20000 ? o.bild : '' };      // das Gebäude gezeichnet wie am Laptop (karte-ansicht.js lässt nur Zeichen-Elemente durch)
   if (o.form === 'kreis') {
     const m = punkt(o.mitte);
     if (!m || typeof o.d !== 'number' || !(o.d >= 0.5 && o.d <= 80)) return null;
@@ -209,13 +210,22 @@ function planOhne(o) {
   return { id: o.id, name, rolle: einzeilig(o.rolle, 30), rund: o.rund === true, vorschlag: { d: gut(v.d, 0.5, 80), b: gut(v.b, 1, 200), t: gut(v.t, 1, 200), woher: einzeilig(v.woher, 80) } };
 }
 
+// Die Lage des Standorts auf der gemeinsamen Karte (A050): Versatz und Rahmen in Metern des gemeinsamen Blatts. Fehlt oder passt etwas nicht, gibt es keinen Rahmen (nichts wird geraten).
+function planBlatt(b) {
+  if (!istObjekt(b) || !Array.isArray(b.versatz) || b.versatz.length !== 2 || !Array.isArray(b.rahmen) || b.rahmen.length !== 4) return null;
+  const v = b.versatz.map(meter), r = b.rahmen.map(meter);
+  if (v.some(x => x === null) || r.some(x => x === null) || !(r[2] > r[0]) || !(r[3] > r[1])) return null;
+  return { versatz: v, rahmen: r };
+}
+
 export function hofPlan(p) {
   if (!istObjekt(p)) return null;
   const objekte = (Array.isArray(p.objekte) ? p.objekte : []).slice(0, PLAN_MAX_OBJEKTE).map(planObjekt).filter(Boolean);
   const ohne = (Array.isArray(p.ohne_platz) ? p.ohne_platz : []).slice(0, 60).map(planOhne).filter(Boolean);
   const weg = (Array.isArray(p.ausgeblendet) ? p.ausgeblendet : []).slice(0, 30)
     .filter(a => istObjekt(a) && typeof a.id === 'string' && HOF_ID.test(a.id) && einzeilig(a.name, 60)).map(a => ({ id: a.id, name: einzeilig(a.name, 60) }));
-  return { objekte, ohne_platz: ohne, ausgeblendet: weg };
+  const blatt = planBlatt(p.blatt);
+  return { objekte, ohne_platz: ohne, ausgeblendet: weg, ...(blatt ? { blatt } : {}) };
 }
 
 export function hofListe(h) {
@@ -227,7 +237,9 @@ export function hofListe(h) {
     const plan = s.plan !== undefined ? hofPlan(s.plan) : null;
     standorte.push({ id: s.id, name: einzeilig(s.name, 60), gebaeude, weitere: Number.isInteger(s.weitere) && s.weitere > 0 && s.weitere < 1e6 ? s.weitere : 0, ...(plan ? { plan } : {}) });
   }
-  return { karte: HOF_KARTE.includes(h.karte) ? h.karte : 'kaputt', hinweis: einzeilig(h.hinweis, 240), standorte };
+  const bild = istObjekt(h.bild) && typeof h.bild.s === 'number' && h.bild.s >= 1 && h.bild.s <= 20 && typeof h.bild.defs === 'string' && h.bild.defs.length <= 4000
+    ? { s: h.bild.s, defs: h.bild.defs } : null;
+  return { karte: HOF_KARTE.includes(h.karte) ? h.karte : 'kaputt', hinweis: einzeilig(h.hinweis, 240), standorte, ...(bild ? { bild } : {}) };
 }
 
 // Die Bestellkarte (Reiter „best“, A040): zu jeder Zeile der Tabelle kann der Laptop Einzelheiten schicken (gleiche Reihenfolge wie die Zeilen). Alles Text, gekürzt;

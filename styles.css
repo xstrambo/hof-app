@@ -545,13 +545,26 @@ body.mit-leiste #s-gesendet .knopf-stapel{bottom:calc(var(--nav) + env(safe-area
 .karte-umschalter .knopf,.karte-standorte .knopf{min-height:44px}
 .karte-umschalter .knopf.an,.karte-standorte .knopf.an,.karte-liste .knopf.an{background:var(--gruen);color:#fff;border-color:var(--gruen)}
 .karte-standorte{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px}
-.karte-svg{display:block;width:100%;height:auto;max-height:60vh;background:#E3EAD2;border:1px solid var(--linie);border-radius:14px;touch-action:manipulation}
+.karte-svg{display:block;width:100%;max-width:100%;height:auto;max-height:70vh;background:#E3EAD2;border:1px solid var(--linie);border-radius:14px;touch-action:none;user-select:none;-webkit-user-select:none}
+/* A050: eine Karte für alle Standorte: Umrandung und Überschrift je Standort, Beschriftung bleibt beim Zoomen gleich groß */
+.karte-svg .hk-rahmen{fill:#D9E2C2;stroke:#6f7f5c;stroke-width:1.3;fill-opacity:.9;pointer-events:none}
+.karte-svg .hk-kopf{fill:#16211B;font-weight:700;paint-order:stroke;stroke:#fff;stroke-linejoin:round;pointer-events:none}
+.karte-svg .hk-skizze{fill:#c9654f;stroke-dasharray:6 3}.karte-svg .hk-schema{fill:#d8c7b0;stroke-dasharray:6 3}
+.karte-svg .hk-name{pointer-events:none}.karte-svg .hk-name[display=none]{display:none}
+.karte-sprung{display:block;font-size:12px;font-weight:400;opacity:.8}
+.karte-standorte .knopf{flex:1 1 120px;min-width:0}
+.karte-gruppe-name{font-size:15px;margin:10px 0 4px}
+.karte-legende .hk-punkt.skizze::before{background:#c9654f}
 .karte-svg.tippen{outline:3px dashed var(--gruen);outline-offset:2px}
 .karte-svg .hk{stroke-width:1.5;stroke:#5a4a3a;fill:#c8a98a;cursor:pointer}
 .karte-svg .hk-luft{fill:#c9a98c}
 .karte-svg .hk-osm{fill:#b97b66}
 .karte-svg .hk-eigen{fill:#8fc28a;stroke:#1F6F3F;stroke-width:2.5}
 .karte-svg .hk-leise{fill-opacity:.55}
+.karte-svg .hk-bild{pointer-events:none}
+.karte-svg .hk.hk-mitbild{fill:transparent;fill-opacity:0;stroke:transparent}
+.karte-svg .hk.hk-mitbild.hk-eigen{stroke:#1F6F3F;stroke-width:2.5}
+.karte-svg .hk.hk-mitbild.gewaehlt{stroke:#16211B;stroke-width:3;stroke-dasharray:7 4}
 .karte-svg .gewaehlt{stroke:#16211B;stroke-width:3.5;stroke-dasharray:6 3}
 .karte-svg .hk-marke{fill:#d0332a;stroke:#fff;stroke-width:2;pointer-events:none}
 .karte-svg .hk-name{fill:#16211B;font-weight:700;paint-order:stroke;stroke:#fff;stroke-width:3;pointer-events:none}
