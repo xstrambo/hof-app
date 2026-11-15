@@ -567,7 +567,7 @@ body.mit-leiste #s-gesendet .knopf-stapel{bottom:calc(var(--nav) + env(safe-area
 .karte-svg .hk.hk-mitbild.gewaehlt{stroke:#16211B;stroke-width:3;stroke-dasharray:7 4}
 .karte-svg .gewaehlt{stroke:#16211B;stroke-width:3.5;stroke-dasharray:6 3}
 .karte-svg .hk-marke{fill:#d0332a;stroke:#fff;stroke-width:2;pointer-events:none}
-.karte-svg .hk-name{fill:#16211B;font-weight:700;paint-order:stroke;stroke:#fff;stroke-width:3;pointer-events:none}
+.karte-svg .hk-name{fill:#16211B;font-weight:700;paint-order:stroke;stroke:#fff;stroke-linejoin:round;pointer-events:none}
 .karte-legende{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--leise);margin:6px 2px 10px}
 .karte-legende .hk-punkt::before{content:"";display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;background:#c9a98c}
 .karte-legende .hk-punkt.eigen::before{background:#8fc28a;border:2px solid #1F6F3F;box-sizing:border-box}
@@ -592,4 +592,6 @@ body.mit-leiste #s-gesendet .knopf-stapel{bottom:calc(var(--nav) + env(safe-area
 .ue-mtab tr.ue-oeffnen.an td{background:var(--gruen-hell)}
 .hof-maschinen{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
 .karte-umschalter .knopf,.karte-standorte .knopf{width:auto;flex:1}
+/* Sprung-Knöpfe der Karte: so breit wie ihr Name, umbrechen in die nächste Zeile statt sich zu überdecken */
+.karte-standorte .knopf{flex:1 1 auto;min-width:0;max-width:100%;padding:6px 14px;font-size:16px;line-height:1.2;white-space:normal;overflow-wrap:anywhere;text-align:center}
 .karte-panel .knopf,.karte-ohne .knopf,.hof-maschinen .knopf{width:auto}

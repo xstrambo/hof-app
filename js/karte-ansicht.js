@@ -12,7 +12,8 @@
 const SVG = 'http://www.w3.org/2000/svg';
 export const NEU_ARTEN = [['silo', 'Silo'], ['behaelter', 'Behälter'], ['gebaeude', 'Gebäude']];
 const PLATZ_TEXT = { osm: 'von OpenStreetMap', luftbild: 'aus dem Luftbild geschätzt', skizze: 'nach Skizze geschätzt', schema: 'nur schematisch (Lage und Form nicht echt)', eigen: 'von dir gesetzt' };
-export const ASPEKT = 1.25;                       // Breite : Höhe der Karte
+export const ASPEKT = 1.25;                       // Breite : Höhe der Karte, wenn die Standorte nebeneinander liegen
+let aspekt = ASPEKT;                               // die Karte richtet sich nach dem Blatt: liegen die Standorte eher übereinander, wird sie höher (mehr Platz am Handy)
 export const ZOOM_MIN = 0.8, ZOOM_MAX = 16, NAH_AB = 2.2;       // so weit lässt sich zoomen; ab dieser Vergrößerung steht auch die Art des Gebäudes dabei
 
 function el(name, klasse, text) {
@@ -152,13 +153,13 @@ export function blattBauen(hof) {
   }
   return teile.length ? { teile, x0, y0, x1, y1 } : null;
 }
-// Ein Ansichtsfenster {cx, cy, w}: Mitte und Breite in Metern (die Höhe folgt aus ASPEKT).
+// Ein Ansichtsfenster {cx, cy, w}: Mitte und Breite in Metern (die Höhe folgt aus aspekt).
 export function fensterFuer(rahmen, rand = 1.06) {
   const [a, b, c, d] = rahmen;
-  return { cx: (a + c) / 2, cy: (b + d) / 2, w: Math.max((c - a) * rand, (d - b) * rand * ASPEKT, 10) };
+  return { cx: (a + c) / 2, cy: (b + d) / 2, w: Math.max((c - a) * rand, (d - b) * rand * aspekt, 10) };
 }
 export const fensterAlles = bl => fensterFuer([bl.x0, bl.y0, bl.x1, bl.y1], 1.04);
-const viewBoxText = f => `${f.cx - f.w / 2} ${-f.cy - f.w / ASPEKT / 2} ${f.w} ${f.w / ASPEKT}`;
+const viewBoxText = f => `${f.cx - f.w / 2} ${-f.cy - f.w / aspekt / 2} ${f.w} ${f.w / aspekt}`;
 
 function findeObjekt(hof, id) {
   for (const s of hof.standorte) {
@@ -185,7 +186,7 @@ export function zeichneKarte(wurzel, hof, k) {
       const b = knopf(t.s.name, 'klein', () => {}, false);
       b.dataset.standort = t.s.id;
       b.title = 'Hierhin springen';
-      b.append(el('span', 'karte-sprung', 'Hierhin springen'));
+      b.setAttribute('aria-label', t.s.name + ' – hierhin springen');
       leiste.append(b);
     }
     kopf.append(leiste);
@@ -198,7 +199,8 @@ export function zeichneKarte(wurzel, hof, k) {
   else {
     if (tippen) wurzel.append(el('p', 'karte-tippen', 'Tippe auf die Karte, in die Umrandung des Standorts, wo es steht. Ein roter Punkt zeigt die Stelle.'));
     const svg = svgEl('svg', { class: 'karte-svg' + (tippen ? ' tippen' : ''), role: 'group', 'aria-label': 'Karte aller Standorte' });
-    svg.dataset.aspekt = String(ASPEKT);
+    aspekt = Math.max(0.9, Math.min(1.6, (bl.x1 - bl.x0) / Math.max(1, bl.y1 - bl.y0)));
+    svg.dataset.aspekt = aspekt.toFixed(3);
     const flaechen = svgEl('g', {});
     const gruppe = svgEl('g', { transform: 'scale(1,-1)' });                       // Norden oben: y nach oben
     const schilder = svgEl('g', { class: 'hk-schilder' });
@@ -213,6 +215,7 @@ export function zeichneKarte(wurzel, hof, k) {
       const u = svgEl('text', { class: 'hk-kopf', x: r[0] + 2, y: -r[3] + 1 });
       u.textContent = t.s.name + (t.s.plan.objekte.some(o => o.platz === 'schema') ? ' (schematisch)' : '');
       u.dataset.standort = t.s.id;
+      u.dataset.breite = String(r[2] - r[0]);
       ueberschriften.push(u);
     }
     const reihe = [];
@@ -238,7 +241,8 @@ export function zeichneKarte(wurzel, hof, k) {
       gruppe.append(f);
       if (o.rolle) {
         const mitte = o.form === 'kreis' ? o.mitte : [o.pts.reduce((a, p) => a + p[0], 0) / o.pts.length, o.pts.reduce((a, p) => a + p[1], 0) / o.pts.length];
-        namen.push({ o, x: mitte[0], y: mitte[1], kreis: o.form === 'kreis' });
+        const xs = o.form === 'kreis' ? [0, o.d] : o.pts.map(p => p[0]), ys = o.form === 'kreis' ? [0, o.d] : o.pts.map(p => p[1]);
+        namen.push({ o, x: mitte[0], y: mitte[1], kreis: o.form === 'kreis', gross: (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys)) });
       }
     }
     svg.append(flaechen, gruppe);
@@ -247,6 +251,7 @@ export function zeichneKarte(wurzel, hof, k) {
       t.textContent = n.o.name;
       t.dataset.kreis = n.kreis ? '1' : '';
       t.dataset.rolle = n.o.rolle;
+      n.t = t;
       schilder.append(t);
     }
     for (const u of ueberschriften) schilder.append(u);
@@ -323,17 +328,39 @@ function karteBedienen(svg, bl, k, tippen, marke, teile) {
     svg.setAttribute('viewBox', viewBoxText(f));
     svg.dataset.zoom = z.toFixed(2);
     svg.dataset.stufe = z >= NAH_AB ? 'nah' : 'ganz';
-    for (const t of teile.schilder.querySelectorAll('.hk-name')) {
-      const nah = z >= NAH_AB;
-      t.setAttribute('font-size', (12.5 * pro).toFixed(3));
-      t.setAttribute('stroke-width', (3 * pro).toFixed(3));
-      t.setAttribute('display', t.dataset.kreis === '1' && !nah ? 'none' : '');     // in der Gesamtansicht nur die Gebäude, die Silos erst vergrößert
-    }
+    // Schilder dürfen sich nicht überdecken: erst die Überschriften der Standorte, dann das gewählte Gebäude, dann die größten Gebäude zuerst.
+    // Was keinen freien Platz hat, bleibt in dieser Vergrößerung ohne Schild und erscheint beim Vergrößern.
+    const belegt = [];
+    const nimm = (x0, y0, x1, y1) => {
+      if (belegt.some(q => x0 < q[2] && x1 > q[0] && y0 < q[3] && y1 > q[1])) return false;
+      belegt.push([x0, y0, x1, y1]);
+      return true;
+    };
     for (const u of teile.ueberschriften) {
-      u.setAttribute('font-size', (14.5 * pro).toFixed(3));
+      const zeichen = Math.max(1, u.textContent.length), platzPx = (Number(u.dataset.breite) || 0) / pro - 6;
+      const px = Math.max(9, Math.min(14.5, platzPx / (zeichen * 0.6)));             // lange Namen werden kleiner, damit sie in ihre Umrandung passen
+      u.setAttribute('font-size', (px * pro).toFixed(3));
       u.setAttribute('stroke-width', (3.5 * pro).toFixed(3));
-      u.setAttribute('dy', (14.5 * pro * 0.95).toFixed(3));
+      u.setAttribute('dy', (px * pro * 0.95).toFixed(3));
+      const x = Number(u.getAttribute('x')), y = Number(u.getAttribute('y'));
+      nimm(x, y, x + zeichen * 0.6 * px * pro, y + px * pro * 1.25);
     }
+    const fs = 12.5 * pro;
+    const folge = teile.namen.slice().sort((a, b) => (b.o.id === k.wahl) - (a.o.id === k.wahl) || a.kreis - b.kreis || b.gross - a.gross);
+    let verdeckt = 0;
+    for (const n of folge) {
+      const t = n.t;
+      t.setAttribute('font-size', fs.toFixed(3));
+      t.setAttribute('stroke-width', (3 * pro).toFixed(3));
+      let zeigen = !(n.kreis && z < 1.5);                                             // in der Gesamtansicht nur die Gebäude, die Silos erst vergrößert
+      if (zeigen) {
+        const halb = (n.o.name.length * 0.58 * fs + 0.5 * fs) / 2;
+        zeigen = nimm(n.x - halb, -n.y - fs * 1.0, n.x + halb, -n.y + fs * 0.35);
+        if (!zeigen) verdeckt += 1;
+      }
+      t.setAttribute('display', zeigen ? '' : 'none');
+    }
+    svg.dataset.verdeckt = String(verdeckt);
     marke.setAttribute('r', (7 * pro).toFixed(3));
     for (const b of teile.kopf.querySelectorAll('button')) {
       const w = b.dataset.alles ? ganz : fensterFuer(bl.teile.find(t => t.s.id === b.dataset.standort).rahmen);
@@ -344,7 +371,7 @@ function karteBedienen(svg, bl, k, tippen, marke, teile) {
   };
   const setze = g => {
     const w = Math.max(ganz.w / ZOOM_MAX, Math.min(ganz.w / ZOOM_MIN, g.w));
-    const h = w / ASPEKT;
+    const h = w / aspekt;
     f = { w, cx: Math.max(bl.x0 - w * 0.4, Math.min(bl.x1 + w * 0.4, g.cx)), cy: Math.max(bl.y0 - h * 0.4, Math.min(bl.y1 + h * 0.4, g.cy)) };
     anpassen();
   };
