@@ -75,6 +75,48 @@ function karteZeichnen(wurzel, g, zurueck, karte = null) {
   wurzel.append(k);
 }
 
+// Die Landkarte (A054): Felder und Gebäude zum Verschieben und Heranholen. Die Zeichnung macht js/landkarte.js (dieselbe Datei wie in der Zentrale).
+const lk = { ansicht: 'kacheln', feld: '' };          // gilt, solange die App offen ist; nichts davon wird gespeichert
+
+function feldKarte(wurzel, f, zurueck) {
+  const k = el('div', 'hof-info');
+  const kopf = el('div', 'hof-info-kopf');
+  const b = el('button', 'knopf-icon');
+  b.type = 'button';
+  b.setAttribute('aria-label', 'Zurück zur Karte');
+  b.textContent = '‹';
+  b.addEventListener('click', zurueck);
+  const titel = el('div', 'hof-info-titel');
+  titel.append(el('h2', '', f.name), el('span', 'hof-rolle', 'Feld' + (f.frucht ? ' · ' + f.frucht : '')));
+  kopf.append(b, titel);
+  k.append(kopf);
+  const box = el('div', 'ue-tabelle hof-abschnitt lk-feldinfo');
+  box.append(el('h2', '', 'Angaben'));
+  const zeilen = [['Nummer', f.nr], ['Größe', f.ha], ['Anbau', (f.anbau || 'ohne Anbau') + (f.anbau_art ? ' (' + f.anbau_art + ')' : '')], ['Vorfrucht', f.vorfrucht], ['Betrieb', f.betrieb], ['Wirtschaftsjahr', f.jahr]];
+  for (const [name, wert] of zeilen) if (wert) box.append(el('div', 'ue-zeile hof-zeile', name + ': ' + wert));
+  k.append(box);
+  k.append(el('p', 'ue-leer', 'Quelle: Ackerprofi. Hier wird nichts geändert.'));
+  wurzel.append(k);
+}
+
+function landkarteZeichnen(wurzel, hof, beiWahl, neu) {
+  const d = hof.landkarte;
+  const tafel = el('section', 'lk-tafel');
+  const flaeche = el('div', 'lk-karte');
+  flaeche.id = 'lk-karte';
+  flaeche.tabIndex = 0;
+  flaeche.setAttribute('aria-label', 'Karte mit Feldern und Gebäuden. Ziehen zum Verschieben.');
+  const sprung = el('div', 'lk-sprung'), legende = el('div', 'lk-legende');
+  tafel.append(flaeche, sprung, legende);
+  if (d.gelesen) tafel.append(el('p', 'lk-stand', 'Felder aus dem Ackerprofi, gelesen ' + d.gelesen));
+  wurzel.append(tafel);
+  if (!window.Landkarte) { flaeche.append(el('p', 'lk-warten', 'Die Karte lässt sich gerade nicht zeichnen. Bitte die App neu öffnen.')); return; }
+  const kachel = d.luftbild ? (z, x, y) => d.adresse.replace('{z}', z).replace('{x}', x).replace('{y}', y) : null;
+  window.Landkarte.start(flaeche, d, { sprung, legende, kachel, oeffnen: o => {
+    if (o.art === 'feld') { lk.feld = o.id; neu(); } else if (hofFinden(hof, o.id)) beiWahl(o.id);
+  } });
+}
+
 // hof = geprüfte Gebäude-Infos (oder null: der Laptop hat keine geschickt). wahl = Kennung des angetippten Gebäudes (oder ''). beiWahl(id) beim Antippen.
 export function zeichneHof(wurzel, hof, wahl, suche, beiWahl, karte = null) {
   wurzel.replaceChildren();
@@ -82,18 +124,34 @@ export function zeichneHof(wurzel, hof, wahl, suche, beiWahl, karte = null) {
   if (hof.karte !== 'ok') { wurzel.append(el('p', 'ue-hinweis', hof.hinweis || 'Auf dem Laptop gibt es noch keine Hof-Karte.')); return; }
   const treffer = hofFinden(hof, wahl);
   if (treffer) { karteZeichnen(wurzel, treffer.gebaeude, () => beiWahl(''), karte); return; }
+  const neu = () => zeichneHof(wurzel, hof, wahl, suche, beiWahl, karte);
   const hatPlan = !!karte && hof.standorte.some(s => s.plan);
-  if (hatPlan) {                                                       // A037: dieselbe Hof-Karte wie am Laptop, zum Bearbeiten (nur Verwalter-Handys mit der Funktion)
+  const hatLand = !!hof.landkarte;
+  if (lk.feld) {                                                       // A054: ein Feld auf der Karte geöffnet
+    const f = hatLand ? hof.landkarte.felder.find(x => x.id === lk.feld) : null;
+    if (f) { feldKarte(wurzel, f, () => { lk.feld = ''; neu(); }); return; }
+    lk.feld = '';
+  }
+  // A054: die neue Karte (Felder und Gebäude) für alle mit dem Reiter „Hof“; „Plätze setzen“ ist die frühere Hof-Karte zum Bearbeiten (A037, nur Verwalter-Handys mit der Funktion)
+  const ansicht = hatPlan && karte.ansicht === 'karte' ? 'karte' : (hatLand && lk.ansicht === 'landkarte' ? 'landkarte' : 'kacheln');
+  if (hatPlan || hatLand) {
     const umschalter = el('div', 'karte-umschalter');
-    for (const [wert, text] of [['kacheln', 'Gebäude'], ['karte', 'Karte']]) {
-      const b = el('button', 'knopf klein' + (karte.ansicht === wert ? ' an' : ''), text);
+    const knoepfe = [['kacheln', 'Gebäude']];
+    if (hatLand) knoepfe.push(['landkarte', 'Karte']);
+    if (hatPlan) knoepfe.push(['karte', hatLand ? 'Plätze setzen' : 'Karte']);
+    for (const [wert, text] of knoepfe) {
+      const b = el('button', 'knopf klein' + (ansicht === wert ? ' an' : ''), text);
       b.type = 'button';
       b.dataset.ansicht = wert;
-      b.addEventListener('click', () => karte.setzeAnsicht(wert));
+      b.addEventListener('click', () => {
+        lk.ansicht = wert === 'landkarte' ? 'landkarte' : 'kacheln';
+        if (hatPlan) karte.setzeAnsicht(wert === 'karte' ? 'karte' : 'kacheln'); else neu();
+      });
       umschalter.append(b);
     }
     wurzel.append(umschalter);
-    if (karte.ansicht === 'karte') { zeichneKarte(wurzel, hof, karte); return; }
+    if (ansicht === 'karte') { zeichneKarte(wurzel, hof, karte); return; }
+    if (ansicht === 'landkarte') { landkarteZeichnen(wurzel, hof, beiWahl, neu); return; }
   }
   if (hof.hinweis) wurzel.append(el('p', 'ue-hinweis', hof.hinweis));
   for (const s of hof.standorte) {

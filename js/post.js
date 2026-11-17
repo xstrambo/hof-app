@@ -228,6 +228,60 @@ export function hofPlan(p) {
   return { objekte, ohne_platz: ohne, ausgeblendet: weg, ...(blatt ? { blatt } : {}) };
 }
 
+// Die Landkarte (A054): Felder mit Feldgrenzen und Gebäude mit echter Lage (Länge, Breite). Alles streng geprüft: Was nicht passt, fällt weg – nichts wird geraten.
+export const LK_MAX_FELDER = 400;
+export const LK_MAX_PUNKTE = 300;
+const LK_ID = /^[A-Za-z0-9_-]{1,40}$/;
+const LK_FARBE = /^#[0-9a-fA-F]{6}$/;
+const lkPunkt = p => (Array.isArray(p) && p.length === 2 && typeof p[0] === 'number' && typeof p[1] === 'number' && Number.isFinite(p[0]) && Number.isFinite(p[1])
+  && Math.abs(p[0]) <= 180 && Math.abs(p[1]) <= 85 ? [p[0], p[1]] : null);
+function lkRinge(r) {
+  if (!Array.isArray(r) || !r.length || r.length > 20) return null;
+  const aus = [];
+  for (const ring of r) {
+    if (!Array.isArray(ring) || ring.length < 3 || ring.length > LK_MAX_PUNKTE) return null;
+    const pts = ring.map(lkPunkt);
+    if (pts.some(p => !p)) return null;
+    aus.push(pts);
+  }
+  return aus;
+}
+function lkFlaeche(o, idMuster) {
+  if (!istObjekt(o) || typeof o.id !== 'string' || !idMuster.test(o.id)) return null;
+  const name = einzeilig(o.name, 80), ringe = lkRinge(o.ringe);
+  if (!name || !ringe) return null;
+  return { id: o.id, name, unter: einzeilig(o.unter, 60), farbe: typeof o.farbe === 'string' && LK_FARBE.test(o.farbe) ? o.farbe : '#9aa3a0', ringe };
+}
+export function hofLandkarte(l) {
+  if (!istObjekt(l)) return null;
+  const felder = [], gebaeude = [], standorte = [], legende = [];
+  for (const f of (Array.isArray(l.felder) ? l.felder : []).slice(0, LK_MAX_FELDER)) {
+    const a = lkFlaeche(f, LK_ID);
+    if (!a) continue;
+    for (const [feld, n] of [['nr', 12], ['ha', 16], ['anbau', 120], ['anbau_art', 30], ['vorfrucht', 120], ['betrieb', 60], ['jahr', 12], ['frucht', 30]]) a[feld] = einzeilig(f[feld], n);
+    felder.push(a);
+  }
+  for (const g of (Array.isArray(l.gebaeude) ? l.gebaeude : []).slice(0, PLAN_MAX_OBJEKTE * 3)) {
+    const a = lkFlaeche(g, HOF_ID);
+    if (a) gebaeude.push({ ...a, standort: typeof g.standort === 'string' && HOF_ID.test(g.standort) ? g.standort : '' });
+  }
+  for (const s of (Array.isArray(l.standorte) ? l.standorte : []).slice(0, HOF_MAX_STANDORTE)) {
+    const m = istObjekt(s) ? lkPunkt(s.mitte) : null;
+    if (m && typeof s.id === 'string' && HOF_ID.test(s.id) && einzeilig(s.name, 60)) standorte.push({ id: s.id, name: einzeilig(s.name, 60), mitte: m });
+  }
+  for (const x of (Array.isArray(l.legende) ? l.legende : []).slice(0, 20)) {
+    if (istObjekt(x) && einzeilig(x.name, 30) && typeof x.farbe === 'string' && LK_FARBE.test(x.farbe)) legende.push({ name: einzeilig(x.name, 30), farbe: x.farbe });
+  }
+  if (!felder.length && !gebaeude.length) return null;
+  const aus = { felder, gebaeude, standorte, legende, gelesen: einzeilig(l.gelesen, 40), luftbild: false, quelle: '' };
+  const lb = istObjekt(l.luftbild) ? l.luftbild : null;                 // Luftbild nur, wenn der Laptop es ausdrücklich schickt: https und alle drei Platzhalter
+  if (lb && typeof lb.adresse === 'string' && lb.adresse.length <= 300 && /^https:\/\/[A-Za-z0-9.-]+\/[^\s"'<>]*$/.test(lb.adresse)
+      && ['{z}', '{x}', '{y}'].every(k => lb.adresse.includes(k))) {
+    aus.luftbild = true; aus.adresse = lb.adresse; aus.quelle = einzeilig(lb.quelle, 120);
+  }
+  return aus;
+}
+
 export function hofListe(h) {
   if (!istObjekt(h) || h.version !== 1) return null;
   const standorte = [];
@@ -239,7 +293,8 @@ export function hofListe(h) {
   }
   const bild = istObjekt(h.bild) && typeof h.bild.s === 'number' && h.bild.s >= 1 && h.bild.s <= 20 && typeof h.bild.defs === 'string' && h.bild.defs.length <= 4000
     ? { s: h.bild.s, defs: h.bild.defs } : null;
-  return { karte: HOF_KARTE.includes(h.karte) ? h.karte : 'kaputt', hinweis: einzeilig(h.hinweis, 240), standorte, ...(bild ? { bild } : {}) };
+  const landkarte = h.landkarte !== undefined ? hofLandkarte(h.landkarte) : null;
+  return { karte: HOF_KARTE.includes(h.karte) ? h.karte : 'kaputt', hinweis: einzeilig(h.hinweis, 240), standorte, ...(bild ? { bild } : {}), ...(landkarte ? { landkarte } : {}) };
 }
 
 // Die Bestellkarte (Reiter „best“, A040): zu jeder Zeile der Tabelle kann der Laptop Einzelheiten schicken (gleiche Reihenfolge wie die Zeilen). Alles Text, gekürzt;
