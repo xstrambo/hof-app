@@ -611,3 +611,17 @@ body.mit-leiste #s-gesendet .knopf-stapel{bottom:calc(var(--nav) + env(safe-area
 /* Sprung-Knöpfe der Karte: so breit wie ihr Name, umbrechen in die nächste Zeile statt sich zu überdecken */
 .karte-standorte .knopf{flex:1 1 auto;min-width:0;max-width:100%;padding:6px 14px;font-size:16px;line-height:1.2;white-space:normal;overflow-wrap:anywhere;text-align:center}
 .karte-panel .knopf,.karte-ohne .knopf,.hof-maschinen .knopf{width:auto}
+
+/* ---------- Station (A055): ein Gerät, das nur seine Übersicht und seine Handgriffe hat (z. B. ein Tablet im Hofladen) ---------- */
+/* Die Knöpfe der Handgriffe stehen über den Reitern: einer füllt die Zeile, mehrere stehen nebeneinander (auf schmalen Handys zwei je Zeile, am Tablet drei).
+   16 Pixel Schrift: so steht auch „Wareneingang“ bei 320 Pixel Breite in einer Zeile; reicht der Platz einmal nicht (andere Schrift), trennt es an der Silbe (index.html). */
+.st-griffe{display:grid;grid-template-columns:repeat(auto-fit,minmax(136px,1fr));gap:8px}
+.st-griff{flex-direction:column;gap:4px;min-height:76px;padding:8px 6px;font-size:16px;line-height:1.15;text-align:center;overflow-wrap:anywhere;min-width:0}
+.st-griff svg{width:28px;height:28px;flex:none;color:var(--gruen-t)}
+.st-griff:active{transform:scale(.98)}
+.st-satz{font-size:17px;line-height:1.4}
+.einladung-hilfe{margin:4px 0 0;line-height:1.35}
+body.station #b-zurueck-uebersicht{display:none}                         /* die Übersicht ist auf einer Station der Anfang: kein „Zurück“ */
+body.station #s-uebersicht .zurueck-kopf{padding-left:20px}
+body.station .untere-leiste{display:flex}                                 /* die Leiste zeigt nur, was die Station hat – die Einträge teilen sich die Breite */
+body.station .untere-leiste>*{flex:1 1 0;min-width:0}

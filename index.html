@@ -151,7 +151,7 @@
   </div>
   <div class="titel-block">
     <h1>Stimmt das so?</h1>
-    <span class="leise">Tippe in den Text, um etwas zu ändern.</span>
+    <span class="leise" id="pruef-hilfe">Tippe in den Text, um etwas zu ändern.</span>
     <span class="bereich-pruefen" id="pruef-bereich" data-funktion="kacheln" hidden></span>
   </div>
   <div class="text-block">
@@ -174,6 +174,8 @@
   <div class="fuellung"></div>
   <div class="knopf-stapel">
     <button type="button" class="knopf neben" id="b-nochmal"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>Nochmal sprechen</button>
+    <!-- Station ohne den Handgriff „sprechen“ (A055): der Text kommt nur aus dem Scanner und lässt sich nicht ändern – senden oder verwerfen -->
+    <button type="button" class="knopf neben" id="b-verwerfen" hidden>Verwerfen</button>
     <button type="button" class="knopf haupt gross" id="b-senden"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 3L3 10.5l7 2.5 2.5 7z"/><path d="M21 3L10 13"/></svg><span id="senden-text">Senden</span></button>
   </div>
 </section>
@@ -216,10 +218,13 @@
     <div class="karte formular">
       <span class="ueberschrift">Neue Einladung</span>
       <div class="einladung" id="einladung" hidden>
-        <div><b class="code-anzeige" id="einladung-code"></b><span class="leise klein">7 Tage gültig · nur einmal nutzbar</span></div>
+        <div><b class="code-anzeige" id="einladung-code"></b><span class="leise klein" id="einladung-art">7 Tage gültig · nur einmal nutzbar</span></div>
         <button type="button" class="knopf neben klein gruen" id="b-teilen">Teilen</button>
       </div>
       <button type="button" class="knopf haupt" id="b-code-neu">Neuen Code erstellen</button>
+      <!-- Station (A055): ein Gerät, das nur zeigt und darf, was am Laptop für es eingestellt ist (z. B. ein Tablet im Hofladen) -->
+      <button type="button" class="knopf" id="b-code-station">Station einladen</button>
+      <p class="leise klein einladung-hilfe">Eine Station ist ein Gerät, das nur zeigt und darf, was du am Laptop für es einstellst (Zentrale → Geräte).</p>
     </div>
     <span class="ueberschrift">Dürfen senden</span>
     <div class="liste" id="mitglieder"></div>
@@ -235,6 +240,15 @@
   </div>
   <div class="ue-inhalt">
     <p class="ue-stand leise klein" id="ue-stand" role="status" aria-live="polite"></p>
+    <!-- Station (A055): je erlaubtem Handgriff ein großer Knopf – nur auf einem Gerät mit der Rolle „station“, nur was sein Profil nennt -->
+    <div class="st-griffe" id="st-griffe" hidden>
+      <button type="button" class="knopf st-griff" id="st-inventur" data-griff="inventur" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10l1.5 1.5L13 9M9 16h6"/></svg><span>Inventur</span></button>
+      <button type="button" class="knopf st-griff" id="st-wareneingang" data-griff="wareneingang" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg><span>Waren&shy;eingang</span></button>
+      <button type="button" class="knopf st-griff" id="st-verkauf" data-griff="verkauf" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/></svg><span>Verkauf</span></button>
+      <button type="button" class="knopf st-griff" id="st-sprechen" data-griff="sprechen" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/><path d="M8.5 21h7"/></svg><span>Sprechen</span></button>
+      <button type="button" class="knopf st-griff" id="st-schreiben" data-griff="sprechen" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg><span>Schreiben</span></button>
+      <button type="button" class="knopf st-griff" id="st-anhang" data-griff="sprechen" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg><span>Foto, Anhang</span></button>
+    </div>
     <div class="ue-reiter-leiste" id="ue-reiter" role="tablist" aria-label="Bereiche"></div>
     <input type="search" class="ue-such" id="ue-such" placeholder="Suchen" aria-label="In der Tabelle suchen" autocomplete="off">
     <div id="ue-seite"></div>

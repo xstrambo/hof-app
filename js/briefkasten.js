@@ -83,12 +83,16 @@ class Echt {
   senden(token, id, umschlag, ziel = 'echt') { return this.rufe('senden', { id, ziel }, token, umschlag); }
   quittungen(token, ids) { return this.rufe('quittungen', { ids }, token); }
   verwaltung(token) { return this.rufe('verwaltung', {}, token); }
-  einladen(token) { return this.rufe('einladen', {}, token); }
+  // Einladung für ein Mitglied (Standard) oder für eine Station (A055: ein Gerät, das nur zeigt und darf, was am Laptop eingestellt ist).
+  // Antwort { code, bis, rolle } – ein Briefkasten, der noch keine Stationen kennt, nennt keine Rolle (und lädt ein Mitglied ein).
+  einladen(token, rolle = 'mitglied') { return this.rufe('einladen', rolle === 'station' ? { rolle: 'station' } : {}, token); }
   freigeben(token, geraet, ja) { return this.rufe('freigeben', { geraet, ja }, token); }
   sperren(token, geraet) { return this.rufe('sperren', { geraet }, token); }
 }
 
 // ---- Attrappe: spielt den Briefkasten im Browser nach (localStorage) ----
+// Rollen wie im echten Briefkasten: admin (Verwalter, sofort frei), mitglied und station (beide warten auf die Freigabe durch einen Verwalter,
+// senden nur an Echt und dürfen nichts verwalten). Eine Station lädt nur ein Verwalter ein: einladen(token, 'station').
 const AK = 'hof-attrappe';
 class Attrappe {
   lies() {
@@ -139,6 +143,7 @@ class Attrappe {
     const z = this.zustand();
     const g = this.geraet(z, token);
     if (g.status !== 'frei') throw new BriefkastenFehler('nicht_frei', 'Noch nicht freigegeben');
+    if (ziel === 'test' && g.rolle !== 'admin') throw new BriefkastenFehler('verboten', 'Test ist nur für Verwalter');      // Mitglieder und Stationen senden nur an Echt
     const roh = new Uint8Array(await new Blob([umschlag]).arrayBuffer());
     if (!z.sendungen[id]) z.sendungen[id] = { von: g.id, groesse: roh.length, abgeholt: false, umschlag: bytesZuB64(roh), zeit: Date.now(), ziel };
     this.schreib(z);
@@ -156,14 +161,16 @@ class Attrappe {
     this.admin(z, token);
     return { geraete: z.geraete.filter(g => g.rolle !== 'laptop' && g.status !== 'gesperrt').map(({ token, ...g }) => g) };
   }
-  async einladen(token) {
+  async einladen(token, rolle = 'mitglied') {
     await this.warte();
     const z = this.zustand();
     this.admin(z, token);
+    const fuer = rolle === 'station' ? 'station' : 'mitglied';               // nur „station“ lädt eine Station ein – alles andere wie bisher ein Mitglied
     let code; do { code = neuerCode(); } while (z.einladungen.some(e => e.code === code));
-    z.einladungen.push({ code, rolle: 'mitglied', bis: Date.now() + 7 * 864e5, benutzt: false });
+    const bis = Date.now() + 7 * 864e5;
+    z.einladungen.push({ code, rolle: fuer, bis, benutzt: false });
     this.schreib(z);
-    return { code, bis: Date.now() + 7 * 864e5 };
+    return { code, bis, rolle: fuer };
   }
   async freigeben(token, geraet, ja) {
     await this.warte();

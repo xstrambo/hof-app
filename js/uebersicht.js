@@ -53,9 +53,11 @@ export function passt(zeile, suche) {
 
 // Die Reiter-Leiste (Knöpfe). beiWahl(name) wird beim Antippen gerufen.
 // mitHof: der Reiter „Hof“ (Funktion „hof“) kommt ans Ende, wenn die Funktion für dieses Handy gilt.
-export function zeichneReiter(wurzel, aktiv, beiWahl, mitHof = false) {
+// nur (optional): eine Liste von Reiter-Namen – dann stehen nur diese da, in der gewohnten Reihenfolge (eine Station, A055, zeigt nur die Reiter ihres Profils).
+export function zeichneReiter(wurzel, aktiv, beiWahl, mitHof = false, nur = null) {
   wurzel.replaceChildren();
-  for (const name of mitHof ? [...UEBERSICHT_TABS, 'hof'] : UEBERSICHT_TABS) {
+  const alle = mitHof ? [...UEBERSICHT_TABS, 'hof'] : UEBERSICHT_TABS;
+  for (const name of Array.isArray(nur) ? alle.filter(n => nur.includes(n)) : alle) {
     const r = name === 'hof' ? HOF_REITER : REITER[name];
     const b = el('button', 'ue-reiter' + (name === aktiv ? ' an' : ''));
     b.type = 'button';

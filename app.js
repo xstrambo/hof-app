@@ -5,7 +5,7 @@ import { packen, verschluesseln, fotoVerkleinern } from './js/paket.js';
 import { Aufnahme, liveTextMoeglich } from './js/sprache.js';
 import { ECHT, TEST, lesModus, schreibModus, normModus, testSchalterErlaubt, schluesselFuer, zielVon, testBlockiert, TEXTE } from './js/modus.js';
 import { ladeFunktionen, sichtbar as funktionSichtbar, anwenden as funktionenAnwenden } from './js/funktionen.js';
-import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon, dateiSchluessel, quittungFuer, uebersichtFuer, uebersichtGrundFuer, uebersichtFrageBauen, karteAuftragBauen, bestaetigungFuer, bestaetigungAntwortBauen } from './js/post.js';
+import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon, dateiSchluessel, quittungFuer, uebersichtFuer, uebersichtGrundFuer, uebersichtFrageBauen, karteAuftragBauen, bestaetigungFuer, bestaetigungAntwortBauen, stationsProfil, SCAN_HANDGRIFFE } from './js/post.js';
 import { zeichneKarte, einblendungText, WAHL_TEXT } from './js/bestaetigung-ansicht.js';
 import { zeichneReiter, zeichneInhalt, standText } from './js/uebersicht.js';
 import { zeichneBestellung } from './js/bestellung-ansicht.js';
@@ -64,10 +64,29 @@ function entwurfMerken(sofort) {
 // (Sprechen, Senden, Post) gibt es auf diesem Gerät dann nicht; das Gerät muss ein freigegebenes Verwalter-Handy sein, und die Übersicht muss gelten.
 const ANZEIGE = new URLSearchParams(location.search).get('anzeige') === 'lager';
 const anzeigeZiel = () => (funktionAktiv('uebersicht') && geraet?.rolle === 'admin' ? 's-uebersicht' : 's-anzeige-aus');
+// Station (Auftrag A055): ein Gerät mit der Rolle „station“ (z. B. ein Tablet im Hofladen). Es hat nur die Übersicht – mit den Reitern und den Handgriffen, die der Laptop
+// in seinem letzten Stand als Profil mitgeschickt hat (js/post.js: stationsProfil). Den Mikrofon-Startbildschirm, Post, Freigaben, Kacheln, den Schalter Echt | Test,
+// die Hof-Karte zum Bearbeiten und Bestätigungs-Karten gibt es dort nicht. Das Profil ist Komfort, keine Sicherheit: Was eine Station sieht und senden darf, setzt der Laptop durch.
+const istStation = () => geraet?.rolle === 'station';
+const stationFrei = () => istStation() && geraet.status === 'frei';
+const stationSicht = () => stationsProfil(postStand, modus);                 // { reiter, handgriffe, satz } – satz: was dasteht, solange es kein Profil gibt
+const stationDarf = griff => stationSicht().handgriffe.includes(griff);
+const freiErlaubt = () => !stationFrei() || stationDarf('sprechen');        // freie Nachrichten (Mikrofon, Text, Anhang): auf einer Station nur mit dem Handgriff „sprechen“
+// Wohin eine Station statt des gewünschten Bildschirms kommt: Alles, was sie nicht hat, führt zur Übersicht (gilt die Funktion „uebersicht“ nicht, bleibt nur der Hinweis).
+function stationZiel(id) {
+  const heim = !ANZEIGE && funktionAktiv('uebersicht') ? 's-uebersicht' : 's-anzeige-aus';
+  const sicht = stationSicht();
+  if (id === 's-bestellung') return heim === 's-uebersicht' && sicht.reiter.includes('best') ? id : heim;
+  if (id === 's-scan') return scannerAktiv() && SCAN_HANDGRIFFE.includes(entwurf.bereich) && sicht.handgriffe.includes(entwurf.bereich) ? id : heim;      // nur in der Art des angetippten Handgriffs
+  if (id === 's-aufnahme') return sicht.handgriffe.includes('sprechen') ? id : heim;
+  if (id === 's-pruefen') return sicht.handgriffe.length ? id : heim;
+  return heim;
+}
 function zeige(id, { verlauf = true } = {}) {
   const ziel = document.getElementById(id);
   if (ziel?.dataset.funktion && !funktionAktiv(ziel.dataset.funktion)) id = 's-start';   // Bildschirm einer noch nicht freigegebenen Funktion: nie zeigen
   if (id === 's-bestellung' && !bestellWahl) id = 's-uebersicht';                          // ohne angetippte Bestellung (z. B. nach dem Neuladen) gibt es keine Karte
+  if (stationFrei()) id = stationZiel(id);                                                 // Station: nur die Übersicht und ihre Handgriffe
   if (ANZEIGE && geraet?.status === 'frei' && id !== 's-uebersicht' && id !== 's-anzeige-aus') id = anzeigeZiel();
   if (aktuell === 's-aufnahme' && id !== 's-aufnahme' && aufnahme) { aufnahme.abbrechen(); aufnahme = null; }
   if (aktuell === 's-scan' && id !== 's-scan') scan.schliessen();                  // die Kamera geht aus, sobald man den Scanner verlässt
@@ -84,7 +103,7 @@ function zeige(id, { verlauf = true } = {}) {
   if (id === 's-bestellung') bestellungZeichnen();
   if (id === 's-bereich') bereichZeichnen();
   if (id === 's-scan' && !scan.oeffnen(entwurf.bereich)) id = 's-start';
-  if (id === 's-pruefen') bereichAnzeigen();
+  if (id === 's-pruefen') { bereichAnzeigen(); pruefenRechte(); }
   navAnzeigen();
 }
 window.addEventListener('popstate', e => {
@@ -121,7 +140,7 @@ async function starten() {
   geraet = await einstellung.hole('geraet');
   await postLaden();
   modusSetzen(lesModus(), { merken: false });
-  funktionenLaden();
+  const flaggen = funktionenLaden();
   const gespeichert = await einstellung.hole('entwurf');
   if (gespeichert) entwurf = { ...neuerEntwurf(), ...gespeichert };
   // Alte Fassungen haben hier gemerkt "Live-Text geht auf diesem Handy nicht" und ihn für immer abgeschaltet.
@@ -131,12 +150,13 @@ async function starten() {
   if (!geraet) return zeige('s-zugang', { verlauf: false });
   setzeName();
   if (geraet.status !== 'frei') return wartenAuf();
+  if (istStation()) await flaggen.catch(() => {});          // Station: ihr Anfang ist die Übersicht, und die hängt an einer Funktion – erst zeigen, wenn funktionen.json gelesen ist
   history.replaceState({ s: 's-start' }, '');
-  zeige('s-start', { verlauf: false });
+  zeige('s-start', { verlauf: false });                     // (eine Station kommt von hier zur Übersicht, siehe stationZiel)
   hintergrund();
   if (ANZEIGE) return;
   // Angefangener Entwurf? Dann gleich dort weitermachen.
-  if (entwurf.text.trim() || entwurf.audio || entwurf.anhaenge.length) { zeigePruefen(false); meldung('Dein angefangener Entwurf ist noch da.'); }
+  if (entwurf.text.trim() || entwurf.audio || entwurf.anhaenge.length) { zeigePruefen(false); if (aktuell === 's-pruefen') meldung('Dein angefangener Entwurf ist noch da.'); }
 }
 
 $('#f-zugang').addEventListener('submit', async e => {
@@ -211,6 +231,7 @@ for (let i = 0; i < 24; i++) pegel.appendChild(document.createElement('span'));
 
 let uhrTimer;
 async function sprechenStarten(nochmal) {
+  if (stationFrei() && !(nochmal ? stationDarf('sprechen') : stationBeginnen('sprechen'))) return;      // Station: Mikrofon nur mit dem Handgriff „sprechen“
   if (!nochmal) { entwurf = { ...neuerEntwurf(), anhaenge: entwurf.anhaenge, text: entwurf.text, bereich: entwurf.bereich }; }
   const vorher = entwurf.text.trim();
   $('#live-fest').textContent = vorher ? vorher + ' ' : '';
@@ -366,6 +387,27 @@ function zeigePruefen(ersetzen) {
   if (ersetzen) { history.replaceState({ s: 's-pruefen' }, ''); zeige('s-pruefen', { verlauf: false }); }
   else zeige('s-pruefen');
 }
+// Was es beim Prüfen gibt (bei jedem Öffnen des Bildschirms neu gesetzt). Auf einer Station ohne den Handgriff „sprechen“: kein Mikrofon, kein Anhang, kein Tippen –
+// der Text kommt nur aus dem Scanner und lässt sich nicht ändern: prüfen, dann senden oder verwerfen. Überall sonst wie bisher.
+function pruefenRechte() {
+  const nurLesen = !freiErlaubt();
+  $('#b-nochmal').hidden = nurLesen;
+  $('#b-anhang-pruefen').hidden = nurLesen;
+  $('#b-verwerfen').hidden = !nurLesen;
+  $('#hof-text').readOnly = nurLesen;
+  $('#pruef-hilfe').textContent = nurLesen ? 'Stimmt etwas nicht? Dann verwerfen und neu scannen.' : 'Tippe in den Text, um etwas zu ändern.';
+}
+// „Verwerfen“ gibt es nur dort, wo sich der Text nicht ändern lässt: der Entwurf ist weg, die Übersicht steht wieder da.
+$('#b-verwerfen').addEventListener('click', async () => {
+  if (freiErlaubt()) return;
+  if (!confirm('Diese Nachricht verwerfen? Die gescannten Zeilen sind dann weg.')) return;
+  entwurf = neuerEntwurf();
+  clearTimeout(entwurfTimer);
+  await einstellung.loesche('entwurf').catch(() => {});
+  history.replaceState({ s: 's-uebersicht' }, '');
+  zeige('s-uebersicht', { verlauf: false });
+  meldung('Verworfen.');
+});
 // Was im leeren Textfeld steht: läuft gerade eine Erkennung, kommt der Text gleich; nur Aufnahme und kein Text (Live-Text ging nicht,
 // Cloud-Erkennung ging nicht): der Laptop schreibt ab; sonst der gewohnte Satz.
 function platzhalterSetzen() {
@@ -407,7 +449,7 @@ function zeichneAnhaenge() {
 }
 
 // ---------- Anhänge ----------
-function blattAuf() { $('#blatt').hidden = false; }
+function blattAuf() { if (freiErlaubt()) $('#blatt').hidden = false; }
 function blattZu() { $('#blatt').hidden = true; }
 $('#b-anhang').addEventListener('click', blattAuf);
 $('#b-anhang-pruefen').addEventListener('click', blattAuf);
@@ -419,7 +461,7 @@ for (const id of ['#in-kamera', '#in-fotos', '#in-dokument']) {
   $(id).addEventListener('change', async e => {
     const dateien = [...e.target.files]; e.target.value = '';
     blattZu();
-    if (!dateien.length) return;
+    if (!dateien.length || !freiErlaubt()) return;
     for (const f of dateien) entwurf.anhaenge.push(f.type.startsWith('image/') ? await fotoVerkleinern(f) : f);
     entwurfMerken(true);
     if (aktuell === 's-pruefen') zeichneAnhaenge(); else zeigePruefen(false);
@@ -429,7 +471,7 @@ for (const id of ['#in-kamera', '#in-fotos', '#in-dokument']) {
 $('#f-schnell').addEventListener('submit', e => {
   e.preventDefault();
   const t = $('#schnell-text').value.trim();
-  if (!t) return;
+  if (!t || !freiErlaubt()) return;                       // (eine Station ohne den Handgriff „sprechen“ schreibt keine freien Nachrichten)
   entwurf = { ...neuerEntwurf(), anhaenge: entwurf.anhaenge, text: [entwurf.text.trim(), t].filter(Boolean).join(' '), bereich: entwurf.bereich };
   $('#schnell-text').value = '';
   zeigePruefen(false);
@@ -473,6 +515,8 @@ $('#b-senden').addEventListener('click', async () => {
     $('.erfolg').classList.remove('offline');
     history.replaceState({ s: 's-gesendet' }, '');
     zeige('s-gesendet', { verlauf: false });
+    const station = stationFrei();                          // Station (A055): statt „Gesendet“ steht gleich wieder die Übersicht da (zeige führt dorthin) – mit einer kurzen Meldung
+    if (station) history.replaceState({ s: aktuell }, '');
     await postausgang();
     const n = await nachrichten.hole(id);
     if (n?.status === 'wartet') {
@@ -482,6 +526,7 @@ $('#b-senden').addEventListener('click', async () => {
     } else {
       $('#erfolg-titel').textContent = 'Gesendet';
     }
+    if (station) meldung(n?.status === 'wartet' ? 'Gespeichert. Kein Netz – geht automatisch raus, sobald Empfang da ist.' : 'Gesendet.', 5000);
   } catch (err) {
     console.error(err);
     meldung('Senden ging schief. Dein Text ist noch da.', 5000);
@@ -546,6 +591,8 @@ function hintergrund() {
   runde();
   setInterval(runde, 30000);                 // alle 30 Sekunden (und sofort, wenn die App wieder sichtbar wird)
   document.addEventListener('visibilitychange', runde);
+  // Station (A055): Ihre Übersicht ist immer offen. Wird das Gerät wieder aufgeweckt, fragt sie wie beim Öffnen von selbst – aber nur, wenn ihr Stand älter als 5 Minuten ist.
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && stationFrei() && aktuell === 's-uebersicht') uebersichtAuto('reiter'); });
 }
 
 // ---------- Listen ----------
@@ -685,7 +732,7 @@ async function ladeFreigaben() {
     const k = document.createElement('div'); k.className = 'wartet-karte';
     k.innerHTML = '<span class="ueberschrift">Wartet auf Freigabe</span><div><b></b><div class="klein"></div></div><div class="zwei"><button type="button" class="knopf haupt">Freigeben</button><button type="button" class="knopf neben">Ablehnen</button></div>';
     k.querySelector('b').textContent = g.name;
-    k.querySelector('.klein').textContent = 'Code ' + g.code + ' · ' + zeitText(g.seit);
+    k.querySelector('.klein').textContent = (g.rolle === 'station' ? 'Station · ' : '') + 'Code ' + g.code + ' · ' + zeitText(g.seit);      // bei einer Station (A055) steht es dabei
     const [ja, nein] = k.querySelectorAll('button');
     ja.addEventListener('click', async () => { await aktion(() => kasten.freigeben(geraet.token, g.id, true)); });
     nein.addEventListener('click', async () => { await aktion(() => kasten.freigeben(geraet.token, g.id, false)); });
@@ -698,7 +745,8 @@ async function ladeFreigaben() {
     const b = document.createElement('b'); b.textContent = g.name;
     const k = document.createElement('span'); k.className = 'klein';
     const du = g.id === geraet.id;
-    k.textContent = du ? 'Du · verwaltet die Freigaben' : 'frei seit ' + new Date(g.seit).toLocaleDateString('de-DE');
+    k.textContent = du ? 'Du · verwaltet die Freigaben' : (g.rolle === 'station' ? 'Station · ' : '') + 'frei seit ' + new Date(g.seit).toLocaleDateString('de-DE');
+    if (g.rolle === 'station') m.dataset.rolle = 'station';
     s.append(b, k); m.appendChild(s);
     if (!du) {
       const sp = document.createElement('button'); sp.type = 'button'; sp.className = 'knopf neben klein'; sp.textContent = 'Sperren';
@@ -713,12 +761,19 @@ async function aktion(fn) {
   try { await fn(); await ladeFreigaben(); } catch { meldung('Das ging nicht. Hast du Netz?'); }
 }
 
-$('#b-code-neu').addEventListener('click', async () => {
+// Einladen: ein Mitglied (wie bisher) oder eine Station (A055). Was eine Station sieht und darf, stellt Niklas danach am Laptop ein (Zentrale → Geräte).
+// Kennt der Briefkasten noch keine Stationen, käme ein Code für ein Mitglied zurück (ohne die Angabe „station“): der wird nie als Stations-Code gezeigt.
+async function einladungZeigen(rolle) {
   try {
-    const r = await kasten.einladen(geraet.token);
-    $('#einladung-code').textContent = r.code; $('#einladung').hidden = false;
+    const r = await kasten.einladen(geraet.token, rolle);
+    if (rolle === 'station' && r.rolle !== 'station') { meldung('Der Briefkasten kann noch keine Station einladen. Bitte Claude Bescheid geben.', 6000); return; }
+    $('#einladung-code').textContent = r.code;
+    $('#einladung-art').textContent = (rolle === 'station' ? 'Für eine Station · ' : '') + '7 Tage gültig · nur einmal nutzbar';
+    $('#einladung').hidden = false;
   } catch { meldung('Neuer Code braucht Netz.'); }
-});
+}
+$('#b-code-neu').addEventListener('click', () => einladungZeigen('mitglied'));
+$('#b-code-station').addEventListener('click', () => einladungZeigen('station'));
 $('#b-teilen').addEventListener('click', async () => {
   const code = $('#einladung-code').textContent;
   const text = 'Hof-App: ' + location.origin + location.pathname + '\nÖffnen, dann „Zum Startbildschirm hinzufügen“. Einladungscode: ' + code;
@@ -736,7 +791,7 @@ $('#b-post-neu').addEventListener('click', () => { postNichtBereitBis = 0; postH
 // Der Schalter steht auf dem Startbildschirm (nur für Geräte, die ihn sehen dürfen); im Test-Modus liegt ein oranges Band über jedem
 // Bildschirm, und der Sendeknopf ist orange. Der Modus bleibt auf diesem Gerät gemerkt (Standard: Echt).
 // A038: den Schalter gibt es nur in der Testebene (localhost), nie auf der echten Adresse (js/modus.js)
-const testSchalterDa = () => testSchalterErlaubt(config, geraet, location.hostname);
+const testSchalterDa = () => !istStation() && testSchalterErlaubt(config, geraet, location.hostname);      // eine Station (A055) hat ihn nie: sie sendet nur an Echt
 function modusSetzen(neu, { merken = true } = {}) {
   modus = testSchalterDa() ? normModus(neu) : ECHT;            // ohne Schalter (die echte Adresse) gilt immer Echt – auch bei einem alten Merker
   if (merken && testSchalterDa()) schreibModus(modus);
@@ -783,6 +838,10 @@ function funktionenAnzeigen() {
   navAnzeigen();
   if (aktuell === 's-uebersicht' || aktuell === 's-bestellung' || aktuell === 's-bereich' || aktuell === 's-scan') { const ziel = document.getElementById(aktuell); if (ziel && !funktionAktiv(ziel.dataset.funktion)) zeige('s-start'); }
   if (ANZEIGE && geraet?.status === 'frei' && aktuell !== anzeigeZiel()) zeige(anzeigeZiel(), { verlauf: false });
+  if (!ANZEIGE && stationFrei()) {                                        // Station: gilt die Übersicht (wieder), steht sie da; ihre Knöpfe richten sich auch nach den Funktionen (Scanner)
+    if (aktuell === 's-anzeige-aus' && funktionAktiv('uebersicht')) zeige('s-uebersicht', { verlauf: false });
+    else if (aktuell === 's-uebersicht') uebersichtZeichnen();
+  }
 }
 let funktionenGeladen = 0;
 async function funktionenLaden() {
@@ -809,6 +868,9 @@ let postZeichnung = '';              // woran erkannt wird, ob sich die Anzeige 
 const postEntwuerfe = new Map();
 
 const postAktiv = () => !!geraet && geraet.status === 'frei' && geraet.rolle === 'admin' && funktionAktiv('rueckfragen');
+// Eine Station (A055) holt auf demselben Weg nur den Stand der Übersicht (und fragt ihn an wie ein Verwalter-Handy): keine Rückfragen, kein „Für dich“, keine Quittungen, keine Karten.
+const stationAktiv = () => stationFrei() && funktionAktiv('rueckfragen');
+const holenAktiv = () => postAktiv() || stationAktiv();
 const aenderungenAktiv = () => funktionAktiv('aenderungen');
 const dingeAktiv = () => funktionAktiv('fuer_dich');
 
@@ -819,13 +881,14 @@ async function privaterSchluessel() {
 }
 
 async function postHolen() {
-  if (postLaeuft || !postAktiv() || !navigator.onLine || Date.now() < postNichtBereitBis) return;
+  if (postLaeuft || !holenAktiv() || !navigator.onLine || Date.now() < postNichtBereitBis) return;
   const privatKey = await privaterSchluessel();
   if (!privatKey) return;
   postLaeuft = true;
   try {
     const r = await postHolenLogik({
       kasten, geraet, config, privatKey, stand: postStand, speichern: postSpeichern, test: modus === TEST,
+      arten: stationFrei() ? ['uebersicht', 'uebersicht_grund'] : null,                             // eine Station nimmt nur die Übersicht an
       dateiSpeichern: (key, bytes) => einstellung.setze(dateiSchluessel(key), bytes),           // das PDF eines „Für dich“-Eintrags
       dateiLoeschen: key => einstellung.loesche(dateiSchluessel(key)),
     });
@@ -956,22 +1019,53 @@ const BAU_CODES = ['fehlt', 'zeit', 'fehler', 'format'];          // bei diesen 
 // Wie alt der Stand ist, zählt ab dem Moment, in dem DIESES Handy ihn bekommen hat (nicht nach der Uhr des Laptops: die Uhren beider Geräte müssen nicht übereinstimmen).
 const standAlter = () => { const u = postStand && postStand.uebersicht ? postStand.uebersicht[normModus(modus)] : null; return u && Number.isFinite(u.gesehen) ? Date.now() - u.gesehen : Infinity; };
 function uebersichtAuto(wann) {
-  if (wann === 'zurueck' || ANZEIGE || ueFragt || !geraet || geraet.status !== 'frei' || !postAktiv() || !funktionAktiv('uebersicht')) return;
+  if (wann === 'zurueck' || ANZEIGE || ueFragt || !geraet || geraet.status !== 'frei' || !holenAktiv() || !funktionAktiv('uebersicht')) return;
   if (Date.now() - ueLetzteFrage < UE_ABSTAND_MS) return;
   if (wann === 'reiter' && standAlter() < UE_ALT_MS) return;
   uebersichtAktualisieren();
 }
 function bestellungOeffnen(d) { bestellWahl = d; zeige('s-bestellung'); }
 function bestellungZeichnen() { zeichneBestellung($('#bestellung-inhalt'), bestellWahl); }
+// Station (A055): die Knöpfe ihrer Handgriffe über den Reitern. sicht = ihr Profil (oder null: keine Station – dann steht keiner da). Ein Scanner-Knopf steht nur da,
+// wenn es den Scanner überhaupt gibt (funktionen.json); „Sprechen“, „Schreiben“ und „Foto, Anhang“ gehören zum Handgriff „sprechen“.
+function stationKnoepfe(sicht) {
+  let einer = false;
+  for (const b of $$('#st-griffe .st-griff')) {
+    const griff = b.dataset.griff;
+    const da = !!sicht && sicht.handgriffe.includes(griff) && (griff === 'sprechen' || scannerAktiv());
+    b.hidden = !da;
+    einer = einer || da;
+  }
+  $('#st-griffe').hidden = !einer;
+}
+const STATION_OHNE_REITER = 'Zum Ansehen ist für dieses Gerät nichts eingestellt.';
+const STATION_HOF_FEHLT = 'Die Hof-Karte ist noch nicht da. Tippe oben auf „Aktualisieren“.';      // das Profil nennt nur den Reiter „Hof“ – und der kommt (wie auf jedem Handy) erst mit einem frischen Stand
+const STATION_LEER = 'Hier steht gerade nichts.';
 function uebersichtZeichnen() {
-  const kopf = uebersichtFuer(postStand, modus);
+  const sicht = stationFrei() ? stationSicht() : null;                         // Station: nur die Reiter und Handgriffe ihres Profils (null = Verwalter-Handy: alles wie bisher)
+  if (sicht && sicht.satz && ueStatus === sicht.satz) ueStatus = '';            // der Satz des Laptops („… noch nichts eingestellt“) steht dann schon groß auf der Seite
+  const kopf = sicht && sicht.satz ? null : uebersichtFuer(postStand, modus);   // eine Station ohne Profil zeigt nichts – auch keinen älteren Stand
   const leiste = $('#ue-reiter');
   const links = leiste.scrollLeft;
   const mitHof = funktionAktiv('hof') && !!(kopf && kopf.hof && kopf.hof.karte === 'ok');       // den Reiter „Hof“ gibt es nur mit Freigabe und nur, wenn der Laptop eine Hof-Karte geschickt hat
-  if (ueReiter === 'hof' && !mitHof) ueReiter = 'lager';
-  zeichneReiter(leiste, ueReiter, name => { if (!ANZEIGE) { ueReiter = name; ueHofWahl = ''; uebersichtZeichnen(); uebersichtAuto('reiter'); } }, mitHof);
+  const nur = sicht ? sicht.reiter.filter(name => name !== 'hof' || mitHof) : null;
+  if (nur && !nur.includes(ueReiter)) { ueReiter = nur[0] || ''; ueHofWahl = ''; }
+  if (!nur && ueReiter === 'hof' && !mitHof) ueReiter = 'lager';
+  zeichneReiter(leiste, ueReiter, name => { if (!ANZEIGE) { ueReiter = name; ueHofWahl = ''; uebersichtZeichnen(); uebersichtAuto('reiter'); } }, mitHof, nur);
   leiste.scrollLeft = links;
-  zeichneInhalt($('#ue-seite'), kopf, ueReiter, ueSuche, ueHofWahl, id => { ueHofWahl = id; uebersichtZeichnen(); }, ANZEIGE ? null : bestellungOeffnen, kartenKontext());
+  const ohneReiter = !!nur && !nur.length;
+  leiste.hidden = ohneReiter;
+  $('#ue-such').hidden = ohneReiter;
+  stationKnoepfe(sicht);
+  if (ohneReiter) {                                                              // Station ohne Reiter: ein Satz statt der Tabellen (der des Laptops, wenn er einen geschickt hat)
+    const satz = document.createElement('p');
+    satz.className = 'ue-hinweis st-satz';
+    satz.textContent = sicht.satz || (sicht.reiter.length ? STATION_HOF_FEHLT : STATION_OHNE_REITER);
+    $('#ue-seite').replaceChildren(satz);
+  } else {
+    zeichneInhalt($('#ue-seite'), kopf, ueReiter, ueSuche, ueHofWahl, id => { ueHofWahl = id; uebersichtZeichnen(); }, ANZEIGE ? null : bestellungOeffnen, kartenKontext());
+    if (sicht && !sicht.handgriffe.includes('sprechen')) for (const p of $$('#ue-seite .ue-leer-satz')) p.textContent = STATION_LEER;      // ohne „sprechen“ keine Aufforderung „Sag z. B. …“
+  }
   const stand = kopf ? standText(kopf.stand) : '';
   $('#ue-stand').textContent = ueFragt ? (kopf ? stand + ' · wird geholt …' : 'Stand wird geholt …') : ueStatus ? ueStatus + (kopf ? ' ' + stand : '') : kopf ? stand : 'Noch kein Stand.';
   $('#b-ue-neu').classList.toggle('dreht', ueFragt);
@@ -979,7 +1073,7 @@ function uebersichtZeichnen() {
 }
 async function uebersichtAktualisieren() {
   if (ueFragt || !geraet) return;
-  if (!postAktiv() || !funktionAktiv('uebersicht')) return;
+  if (!holenAktiv() || !funktionAktiv('uebersicht')) return;
   const ziel = modus;                                                       // gefragt wird den Laptop des Modus, in dem man gerade ist
   if (!navigator.onLine) { ueStatus = 'Kein Netz – das ist der letzte Stand.'; uebersichtZeichnen(); return; }
   const privatKey = await privaterSchluessel();
@@ -1071,7 +1165,11 @@ async function karteSenden(aktion, parameter) {
 }
 $('#b-zurueck-uebersicht').addEventListener('click', () => history.back());
 $('#b-ue-neu').addEventListener('click', () => uebersichtAktualisieren());
-$('#ue-such').addEventListener('input', e => { ueSuche = e.target.value; zeichneInhalt($('#ue-seite'), uebersichtFuer(postStand, modus), ueReiter, ueSuche, ueHofWahl, id => { ueHofWahl = id; uebersichtZeichnen(); }, ANZEIGE ? null : bestellungOeffnen, kartenKontext()); });
+$('#ue-such').addEventListener('input', e => {
+  ueSuche = e.target.value;
+  if (stationFrei()) { uebersichtZeichnen(); return; }                          // Station: immer über ihr Profil zeichnen
+  zeichneInhalt($('#ue-seite'), uebersichtFuer(postStand, modus), ueReiter, ueSuche, ueHofWahl, id => { ueHofWahl = id; uebersichtZeichnen(); }, ANZEIGE ? null : bestellungOeffnen, kartenKontext());
+});
 $('#b-zurueck-bestellung').addEventListener('click', () => history.back());
 
 // ---------- Kacheln (Funktion „kacheln“) ----------
@@ -1140,8 +1238,13 @@ function navAnzeigen() {
   nav.hidden = !da;
   document.body.classList.toggle('mit-leiste', da);
   const verwalter = geraet?.rolle === 'admin';
-  $('#nav-uebersicht').hidden = !verwalter;                                  // …und ohne Funktion „uebersicht“ blendet styles.css ihn aus
+  const station = stationFrei();                                             // Station (A055): die Leiste zeigt nur, was sie hat – die Übersicht und, mit dem Handgriff „sprechen“, den Sprechknopf
+  document.body.classList.toggle('station', station);                        // styles.css: kein „Zurück“ in der Übersicht, die Einträge der Leiste teilen sich die Breite
+  $('#nav-start').hidden = station;
+  $('#nav-uebersicht').hidden = !verwalter && !station;                      // …und ohne Funktion „uebersicht“ blendet styles.css ihn aus
   $('#nav-post').hidden = !verwalter;                                        // …ebenso ohne „rueckfragen“
+  $('#nav-mehr').hidden = station;
+  $('.nav-mitte').hidden = station && !stationDarf('sprechen');
   const zahl = Number($('#post-zaehler').textContent) || 0;
   const abz = $('#nav-abzeichen'); abz.textContent = String(zahl); abz.hidden = !zahl;
   $('#nav-post').setAttribute('aria-label', zahl ? 'Post – ' + zahl + (zahl === 1 ? ' wartet' : ' warten') : 'Post');
@@ -1177,9 +1280,9 @@ function mehrZeichnen() {
   $('#mehr-aenderungen').hidden = !(verwalter && funktionAktiv('aenderungen') && funktionAktiv('rueckfragen'));
   $('#mehr-freigaben').hidden = !verwalter;
 }
-function fabBlattZeichnen() { $('#fab-scannen').hidden = !scannerAktiv(); }
+function fabBlattZeichnen() { $('#fab-scannen').hidden = !scannerAktiv() || stationFrei(); }      // eine Station scannt nur über die Knöpfe ihrer Handgriffe (feste Art)
 function scannenOeffnen() {
-  if (!scannerAktiv()) return;
+  if (!scannerAktiv() || stationFrei()) return;
   if (istScanBereich(entwurf.bereich)) { geheZu('s-scan'); return; }
   geheZu('s-bereich');
   meldung('Wähle zuerst den Bereich: Wareneingang, Verkauf oder Inventur.', 5000);
@@ -1221,12 +1324,42 @@ $('#fab-foto').addEventListener('click', () => { blaetterSchliessen(); history.b
 $('#fab-tippen').addEventListener('click', () => {
   const ersetzen = !!offenesBlatt;
   blaetterSchliessen();
+  if (!freiErlaubt()) return;
   entwurf = { ...neuerEntwurf(), anhaenge: entwurf.anhaenge, text: entwurf.text, bereich: entwurf.bereich };
   zeigePruefen(false);
   if (ersetzen) history.replaceState({ s: 's-pruefen' }, '');
   $('#hof-text').focus();
 });
 $('#fab-scannen').addEventListener('click', scannenOeffnen);
+
+// ---------- Station: die Knöpfe der Handgriffe (A055) ----------
+// „Inventur“, „Wareneingang“, „Verkauf“ öffnen den Scanner in genau dieser Art (eine andere lässt sich dort nicht wählen: die Kacheln gibt es auf einer Station nicht).
+// „Fertig“ führt wie überall über Prüfen zum Senden; danach steht wieder die Übersicht da. „Sprechen“, „Schreiben“ und „Foto, Anhang“ gibt es nur mit dem Handgriff „sprechen“.
+// Ein Entwurf gehört auf einer Station zu genau einem Handgriff (ohne Bereich = freie Nachricht). Liegt noch einer da, geht es zuerst dorthin (senden, leeren oder
+// verwerfen) – nur eine freie Nachricht lässt sich weiterschreiben. So mischt sich nichts (jede Scanner-Nachricht hat genau eine Art und einen Kopf), und nichts geht verloren.
+function stationBeginnen(griff) {
+  if (!stationFrei() || !stationDarf(griff)) return false;
+  const bereich = griff === 'sprechen' ? '' : griff;
+  const offen = !!(entwurf.text.trim() || entwurf.audio || entwurf.anhaenge.length);
+  if (offen && !(bereich === '' && entwurf.bereich === '')) {
+    zeigePruefen(false);
+    meldung('Hier liegt noch ein Entwurf. Bitte erst senden oder ' + (freiErlaubt() ? 'den Text leeren.' : 'verwerfen.'), 6000);
+    return false;
+  }
+  if (entwurf.bereich !== bereich) { entwurf.bereich = bereich; entwurfMerken(true); }
+  return true;
+}
+function stationScannen(art) { if (scannerAktiv() && stationBeginnen(art)) zeige('s-scan'); }
+$('#st-inventur').addEventListener('click', () => stationScannen('inventur'));
+$('#st-wareneingang').addEventListener('click', () => stationScannen('wareneingang'));
+$('#st-verkauf').addEventListener('click', () => stationScannen('verkauf'));
+$('#st-sprechen').addEventListener('click', () => { if (stationFrei()) sprechenStarten(false); });
+$('#st-schreiben').addEventListener('click', () => {
+  if (!stationBeginnen('sprechen')) return;
+  zeigePruefen(false);                                   // ein angefangener freier Text steht dort noch und lässt sich weiterschreiben
+  $('#hof-text').focus();
+});
+$('#st-anhang').addEventListener('click', () => { if (stationBeginnen('sprechen')) blattAuf(); });
 // ---------- Hilfen ----------
 function dauerText(s) { s = Math.round(s || 0); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
 function zeitText(ms) {
@@ -1255,6 +1388,7 @@ window.hofApp = {
   bereich: () => entwurf.bereich,
   scan: { code: t => scan.code(t), zustand: () => scan.zustand(), entwurf: () => ({ text: entwurf.text, bereich: entwurf.bereich }) },
   sprache: { cloudAktiv, pauseBis: () => cloudPauseBis, offen: () => erkennungOffen },
+  station: { frei: stationFrei, sicht: () => stationSicht(), rolle: () => (geraet ? geraet.rolle : ''), nimmtAuf: () => !!aufnahme },
 };
 
 starten();

@@ -2,7 +2,8 @@
 // Alles hier ist Logik ohne Oberfläche, damit sie sich einzeln prüfen lässt (Speicher und Briefkasten kommen von außen).
 //
 // Ablauf
-//  - Der Laptop legt verschlüsselte, beglaubigte Umschläge für dieses Handy im Briefkasten ab (nur für Verwalter-Handys).
+//  - Der Laptop legt verschlüsselte, beglaubigte Umschläge für dieses Handy im Briefkasten ab (nur für Verwalter-Handys; eine Station – A055 –
+//    bekommt auf demselben Weg nur den Stand der Übersicht, zugeschnitten auf ihr Profil).
 //  - Das Handy holt sie (nur dieses Handy kann sie öffnen), prüft die Beglaubigung mit dem öffentlichen Schlüssel des Laptops der genannten
 //    Instanz und quittiert – danach ist der Umschlag im Briefkasten gelöscht.
 //  - Antworten gehen als beglaubigte Nachricht durch die normale Warteschlange der App (klappt auch ohne Netz) an den Laptop.
@@ -343,17 +344,32 @@ function uebersichtTab(t) {
   return aus;
 }
 
+// Station (Auftrag A055): ein Gerät (z. B. ein Tablet im Hofladen), dem der Laptop nur bestimmte Reiter schickt und das nur bestimmte Handgriffe hat. Was es zeigt und
+// anbietet, sagt das Profil im Stand (`profil: { reiter: […], handgriffe: […] }`) – nur der Stand für eine Station trägt eines. Hier wird es geprüft: nur bekannte Reiter
+// und Handgriffe, jede Angabe einmal, in fester Reihenfolge; alles andere fällt weg (ein unlesbares Profil ist ein leeres). Fehlt `profil`, ist es der Stand für ein
+// Verwalter-Handy und alles gilt wie bisher. Das Profil ist Komfort, keine Sicherheit: durchgesetzt wird am Laptop.
+export const STATION_REITER = [...UEBERSICHT_TABS, 'hof'];
+export const SCAN_HANDGRIFFE = ['inventur', 'wareneingang', 'verkauf'];        // die drei Arten des Scanners
+export const STATION_HANDGRIFFE = [...SCAN_HANDGRIFFE, 'sprechen'];            // sprechen = freie Nachrichten (Sprache, Text, Anhang)
+export function profilKopf(p) {
+  const bekannt = (liste, erlaubt) => (Array.isArray(liste) ? erlaubt.filter(n => liste.includes(n)) : []);
+  return istObjekt(p) ? { reiter: bekannt(p.reiter, STATION_REITER), handgriffe: bekannt(p.handgriffe, STATION_HANDGRIFFE) } : { reiter: [], handgriffe: [] };
+}
+
 export function uebersichtKopf(k) {
   if (!istObjekt(k) || k.art !== 'uebersicht' || k.version !== 1) return null;
   const id = typeof k.id === 'string' ? k.id : '';
   const stand = zeitText(k.stand);
   if (!ID_OK.test(id) || !stand || !istObjekt(k.tabs)) return null;
+  const profil = k.profil !== undefined ? profilKopf(k.profil) : null;          // nur im Stand für eine Station (A055)
   const tabs = {};
   for (const name of UEBERSICHT_TABS) { const t = uebersichtTab(k.tabs[name]); if (t) tabs[name] = t; }
-  if (!Object.keys(tabs).length) return null;
+  if (!Object.keys(tabs).length && !profil) return null;                 // ohne Profil wie bisher: mindestens ein Reiter. Eine Station kann auch nur Handgriffe haben (dann kommt kein Reiter mit, oder nur die Artikelliste `scan` im Reiter „lager“)
+  if (profil && tabs.best) for (const z of tabs.best.tabelle.zeilen) if (z.d) { delete z.d.kontakt; delete z.d.notiz; }      // eine Station sieht nie Kontakt und Notiz einer Bestellung (der Laptop lässt beides schon weg)
   const hof = k.hof !== undefined ? hofListe(k.hof) : null;           // Gebäude-Infos (Funktion „hof“); fehlen sie, bleibt alles andere, wie es war
   const ergebnis = istObjekt(k.ergebnis) && typeof k.ergebnis.ok === 'boolean' && einzeilig(k.ergebnis.text, 200) ? { ok: k.ergebnis.ok, text: einzeilig(k.ergebnis.text, 200) } : null;      // das Ergebnis eines Auftrags (A037)
-  return { id, frage: typeof k.frage === 'string' && UUID.test(k.frage) ? k.frage : '', stand, gesendet: zeitText(k.gesendet), tabs, ...(hof ? { hof } : {}), ...(ergebnis ? { ergebnis } : {}) };
+  return { id, frage: typeof k.frage === 'string' && UUID.test(k.frage) ? k.frage : '', stand, gesendet: zeitText(k.gesendet), tabs, ...(hof ? { hof } : {}), ...(ergebnis ? { ergebnis } : {}),
+           ...(profil ? { profil } : {}) };
 }
 
 // Der Grund, warum der Laptop keinen Stand schickt (A040): ein kurzer fester Satz, dazu ein Kennwort.
@@ -382,6 +398,19 @@ function normUebersicht(key, u) {
 export function uebersichtFuer(stand, instanz) {
   const u = stand && istObjekt(stand.uebersicht) ? stand.uebersicht[normModus(instanz)] : null;
   return u && u.kopf ? u.kopf : null;
+}
+
+// Was eine Station (A055) zeigt und anbietet: das Profil aus dem letzten geprüften Stand dieser Instanz. Ohne Stand, ohne Profil im Stand oder wenn der Laptop danach
+// gemeldet hat, dass für dieses Gerät nichts eingestellt ist (Grund „kein_profil“), ist es leer – `satz` sagt dann, was stattdessen auf dem Bildschirm steht.
+export const STATION_NICHTS = 'Der Laptop hat für dieses Gerät noch nichts geschickt.';
+export function stationsProfil(stand, instanz) {
+  const i = normModus(instanz);
+  const u = stand && istObjekt(stand.uebersicht) ? stand.uebersicht[i] : null;
+  const g = stand && istObjekt(stand.uebersichtGrund) ? stand.uebersichtGrund[i] : null;
+  const standDanach = !!(u && u.kopf && g && u.gesehen > g.gesehen);                                    // kam nach dem Grund wieder ein Stand, gilt der Stand
+  if (g && g.kopf && g.kopf.code === 'kein_profil' && !standDanach) return { reiter: [], handgriffe: [], satz: g.kopf.grund };
+  if (!u || !u.kopf || !u.kopf.profil) return { reiter: [], handgriffe: [], satz: STATION_NICHTS };
+  return { reiter: [...u.kopf.profil.reiter], handgriffe: [...u.kopf.profil.handgriffe], satz: '' };
 }
 
 // Quittung zu einer Nachricht, die dieses Handy gesendet hat („Angekommen · gebucht: …“). Sie ist keine Karte in der Post, sondern steht im Verlauf
@@ -762,8 +791,10 @@ export async function bestaetigungAntwortBauen({ eintrag, wahl, geraet, config, 
 // kasten: antwortenListe(token, test), antwortHolen(token, id, test), antwortQuittieren(token, id, test) (siehe briefkasten.js)
 // dateiSpeichern(schluessel, bytes) / dateiLoeschen(schluessel): wohin das PDF eines „Für dich“-Eintrags kommt (kann werfen, z. B. Speicher voll:
 // dann wird nichts quittiert und der Umschlag beim nächsten Mal noch einmal geholt).
+// arten (optional): nur Nachrichten dieser Arten werden eingearbeitet, alles andere wird verworfen (und quittiert) – eine Station (A055) nimmt so nur die Übersicht an,
+// nie Rückfragen, „Für dich“, Quittungen oder Karten.
 // Gibt { neu, geaendert, erledigt, dinge, quittungen, bestaetigungen, verworfen, uebersprungen, schluesselFehlt } zurück. Wirft BriefkastenFehler, wenn der Briefkasten nicht antwortet.
-export async function holen({ kasten, geraet, config, privatKey, stand, speichern, test = false, jetzt = () => Date.now(), dateiSpeichern = async () => {}, dateiLoeschen = async () => {} }) {
+export async function holen({ kasten, geraet, config, privatKey, stand, speichern, test = false, jetzt = () => Date.now(), dateiSpeichern = async () => {}, dateiLoeschen = async () => {}, arten = null }) {
   const erg = { neu: 0, geaendert: 0, erledigt: 0, dinge: 0, quittungen: 0, bestaetigungen: 0, uebersicht: 0, verworfen: 0, uebersprungen: 0, schluesselFehlt: false };
   const r = await kasten.antwortenListe(geraet.token, test);
   if (!istObjekt(r)) return erg;
@@ -790,7 +821,7 @@ export async function holen({ kasten, geraet, config, privatKey, stand, speicher
     try {
       const klar = await beglaubigtOeffnen(await entschluesseln(umschlag, privatKey), mac);
       const { kopf, dateien } = auspacken(klar);
-      if (kopf && kopf.ziel === instanz) {
+      if (kopf && kopf.ziel === instanz && (!Array.isArray(arten) || arten.includes(kopf.art))) {
         if (kopf.art === 'uebersicht' || kopf.art === 'uebersicht_grund') {
           ergebnis = dateien.length ? 'ungueltig' : anwenden(stand, instanz, { ...kopf, dateien: [] }, jetzt());          // der Stand (und der Grund) trägt nie eine Datei
         } else if (kopf.art === 'fuer_dich' && kopf.ding === 'bestaetigung') {
