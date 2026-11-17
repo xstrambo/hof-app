@@ -8,11 +8,11 @@
 .dash .lk-tafel{margin-bottom:0}
 .lk-kopf{display:flex;align-items:baseline;justify-content:space-between;gap:12px;border-bottom:1px solid #4a4f4d;margin-bottom:10px;padding-bottom:8px}
 .lk-kopf h2{margin:0;border:0;padding:0;font-size:14px;font-weight:normal;letter-spacing:.14em;text-transform:uppercase;color:#eef1ee}
-.lk-gross{color:#9fe07f;font-size:15px}
+.lk-gross{color:#70c291;font-size:15px}
 .lk-karte{position:relative;height:min(68vh,640px);min-height:380px;background:#2b2e2d;border-radius:4px;overflow:hidden;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
 .lk-klein .lk-karte{height:min(56vh,520px)}
 .lk-karte.lk-zieht{cursor:grabbing}
-.lk-karte:focus-visible{outline:3px solid #9fe07f;outline-offset:2px}
+.lk-karte:focus-visible{outline:3px solid #70c291;outline-offset:2px}
 .lk-warten,.lk-leer{position:absolute;left:14px;right:14px;top:14px;margin:0;color:#a9b0ac;font-size:16px}
 .lk-leer{top:auto;bottom:44px;background:#262827cc;padding:8px 10px;border-radius:4px;color:#eef1ee}
 .lk-kacheln{position:absolute;inset:0;overflow:hidden}
@@ -31,15 +31,15 @@
 .lk-knoepfe{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:6px}
 .lk-knoepfe button{width:48px;height:48px;border-radius:4px;border:1px solid #4a4f4d;background:#262827;color:#eef1ee;font-size:22px;line-height:1;cursor:pointer}
 .lk-knoepfe button:hover{background:#313433}
-.lk-knoepfe button:focus-visible,.lk-sprungknopf:focus-visible,.lk-blase a:focus-visible,.lk-blase button:focus-visible{outline:3px solid #9fe07f;outline-offset:2px}
+.lk-knoepfe button:focus-visible,.lk-sprungknopf:focus-visible,.lk-blase a:focus-visible,.lk-blase button:focus-visible{outline:3px solid #70c291;outline-offset:2px}
 .lk-quelle{position:absolute;right:6px;bottom:4px;font-size:11px;color:#eef1ee;background:#262827b3;padding:1px 6px;border-radius:3px;pointer-events:none}
 .lk-quelle:empty{display:none}
 .lk-blase{position:absolute;width:226px;background:#3a3d3c;color:#eef1ee;border-radius:4px;padding:10px 12px;font-size:15px;box-shadow:0 4px 14px #0008;cursor:default}
 .lk-blase b{display:block;letter-spacing:.06em;margin-bottom:2px;overflow-wrap:anywhere}
 .lk-blase span{display:block;color:#cfd5d1}
 .lk-blase-zeile{display:flex;gap:16px;align-items:center;margin-top:2px}
-.lk-blase a{color:#9fe07f;font-weight:bold;min-height:48px;display:inline-flex;align-items:center}
-.lk-blase button.lk-oeffnen{color:#9fe07f;font-weight:bold}
+.lk-blase a{color:#70c291;font-weight:bold;min-height:48px;display:inline-flex;align-items:center}
+.lk-blase button.lk-oeffnen{color:#70c291;font-weight:bold}
 .lk-blase button{background:none;border:0;padding:0;color:#ff9a9d;text-decoration:underline;font:inherit;cursor:pointer;min-height:48px}
 .lk-sprung{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .lk-sprung:empty,.lk-legende:empty{display:none}

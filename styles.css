@@ -1,12 +1,14 @@
 /* Aussehen „Sand und dunkle Tafeln" (A054): Seitengrund Sand, alles Antippbare und alle Kästen dunkel mit heller Schrift.
    Schrift: Georgia, falls auf dem Gerät vorhanden, sonst die Serifenschrift des Handys – nichts wird aus dem Netz geladen.
    Farben stehen nur hier oben. --text / --leise / --gruen-t / --rot-t / --orange sind die Schriftfarben: auf dem Sand dunkel,
-   in jeder dunklen Tafel hell (siehe „Dunkle Tafeln" weiter unten). --gruen / --rot / --gelb sind Flächen- und Randfarben. */
+   in jeder dunklen Tafel hell (siehe „Dunkle Tafeln" weiter unten). --rot / --gelb sind Flächen- und Randfarben.
+   Grün (Niklas, 17.11.2026: nicht grell, das dunkle Grün des App-Zeichens): --gruen ist das dunkle Grün der Flächen (Mikrofon, Hauptknöpfe), darauf steht weiße Schrift (--auf-gruen).
+   --gruen-licht ist das ruhige helle Grün für Striche, Ränder und Zeichen auf dunklen Tafeln – dunkles Grün wäre dort nicht zu sehen. --tinte ist das fast schwarze Grün für Schrift auf Gelb und den Rand des Tastatur-Rings. */
 
 :root{
   --grund:#e3d3b0; --flaeche:#262827; --flaeche2:#313433; --linie:#4a4f4d; --rahmen:#4a4f4d;
   --text:#1c2422; --leise:#4a4a3a; --hell:#eef1ee; --hell-leise:#a9b0ac;
-  --gruen:#7ccf5a; --auf-gruen:#10210c; --gruen-t:#23561a; --gruen-hell:#2c3a27; --gruen-ring:#262827;
+  --gruen:#1F6F3F; --auf-gruen:#ffffff; --gruen-licht:#70c291; --gruen-t:#17592f; --gruen-hell:#243a2d; --gruen-ring:#262827; --tinte:#10210c;
   --gelb:#f3d23b; --rot:#e5484d; --auf-rot:#1a0506; --rot-t:#8f1a20; --orange:#5f3c00;
   --warn-grund:#262827; --warn-rahmen:#f3d23b; --warn-text:#eef1ee; --platz:#313433; --knopf-grund:#262827;
   --test:#F28C00; --test-dunkel:#1A1200;
@@ -19,13 +21,13 @@ body{background:var(--grund);color:var(--text);font:17px/1.4 Georgia,"Times New 
 svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 button,input,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
-:focus-visible{outline:3px solid var(--gruen);outline-offset:2px;box-shadow:0 0 0 2px var(--auf-gruen),0 0 0 7px var(--auf-gruen)}   /* grüner Ring zwischen zwei dunklen: auf Sand und auf dunklen Tafeln gut zu sehen */
+:focus-visible{outline:3px solid var(--gruen-licht);outline-offset:2px;box-shadow:0 0 0 2px var(--tinte),0 0 0 7px var(--tinte)}   /* heller grüner Ring zwischen zwei dunklen: auf Sand und auf dunklen Tafeln gut zu sehen */
 
 /* Dunkle Tafeln: Kästen, Listen, Kacheln, Dialoge, Leisten, Knöpfe und Eingabefelder. Hier werden die Schriftfarben hell – alles darin erbt sie. */
 .eintrag,.karte,.legende,.erfolg,.erkennung,.wartet-karte,.mitglied,.blatt,.leiste,.modus,.post-karte,.post-hinweis,.frage,.ding,.kachel,.ue-zahl,.ue-tabelle,.ue-maschinen,
 .hof-kachel,.hof-kennzahl,.ue-hinweis,.best-posten,.best-felder,.scan-hinweis,.karte-panel,.karte-ohne,.karte-tippen,.karte-meldung,.untere-leiste,
 .knopf,.karte-knopf,.antwort-wahl,.dreier-wahl,.ue-akt,.ue-reiter,.mic-seite-rund,.stop-knopf,.anhang,.play,.rund,.post-icon,.meldung,.einblendung,input,textarea,select
-{--text:var(--hell);--leise:var(--hell-leise);--gruen-t:var(--gruen);--rot-t:#ff8589;--orange:var(--gelb);color:var(--text)}
+{--text:var(--hell);--leise:var(--hell-leise);--gruen-t:var(--gruen-licht);--rot-t:#ff8589;--orange:var(--gelb);color:var(--text)}
 .karte,.wartet-karte,.mitglied,.blatt,.frage,.ding,.ue-tabelle,.karte-panel,.karte-ohne,.eintrag{--knopf-grund:var(--flaeche2)}      /* Knöpfe in einer Tafel: eine Stufe heller als die Tafel */
 input,textarea,select{color-scheme:dark}
 input::placeholder,textarea::placeholder{color:var(--hell-leise);opacity:1}
@@ -76,7 +78,7 @@ input::placeholder,textarea::placeholder{color:var(--hell-leise);opacity:1}
 .zeit.wartet{color:var(--orange);font-weight:700}
 .st{display:inline-block;width:20px;height:20px;flex:none;background-repeat:no-repeat;background-size:20px}
 .st-gesendet{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23a9b0ac' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E")}
-.st-abgeholt{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237ccf5a' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 12.5l4.5 4.5L16 7.5'/%3E%3Cpath d='M11.5 16.5l.5.5L21.5 7.5'/%3E%3C/svg%3E")}
+.st-abgeholt{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2370c291' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 12.5l4.5 4.5L16 7.5'/%3E%3Cpath d='M11.5 16.5l.5.5L21.5 7.5'/%3E%3C/svg%3E")}
 .st-wartet{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f3d23b' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E")}
 .leer{color:var(--leise);font-size:15px;padding:4px}
 
@@ -148,7 +150,7 @@ body.mit-scan #s-start{--fest:352px}                              /* der Knopf �
 .verlauf .eintrag.test{border-left:6px solid var(--test);padding-left:8px}
 .verlauf .eintrag.mit-quittung{flex-wrap:wrap;row-gap:3px}                                                   /* die Quittung steht in einer eigenen Zeile unter der Nachricht, im selben Kasten */
 .eintrag-quittung{flex:0 0 100%;min-width:0;font-size:14px;line-height:1.3;color:var(--leise);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
-.eintrag-quittung::before{content:"\2713\00a0";color:var(--gruen);font-weight:700}                                          /* der Haken: es ist angekommen */
+.eintrag-quittung::before{content:"\2713\00a0";color:var(--gruen-licht);font-weight:700}                                          /* der Haken: es ist angekommen */
 /* Die Karte „Bestätigen?“ (Funktion „bestaetigung“): steht im selben Kasten wie die Nachricht, in einer eigenen Zeile darunter */
 .verlauf .eintrag.mit-karte{flex-wrap:wrap;row-gap:6px}
 #s-start:has(#liste-start .eintrag-karte[data-stand="offen"]){--ruhe:440px}
@@ -184,7 +186,7 @@ body.mit-scan #s-start{--fest:352px}                              /* der Knopf �
 .vorlaeufig{color:var(--leise)}
 .mitschrift .live-hinweis{font-size:16px;line-height:1.4}
 .live-hinweis small{display:block;margin-top:4px;font-size:13px;opacity:.85}
-.cursor{display:inline-block;width:3px;height:26px;margin-left:3px;vertical-align:-4px;background:var(--gruen);animation:blink 1s steps(1) infinite}
+.cursor{display:inline-block;width:3px;height:26px;margin-left:3px;vertical-align:-4px;background:var(--gruen-t);animation:blink 1s steps(1) infinite}
 .pegel{display:flex;align-items:center;gap:4px;height:52px}
 .pegel span{width:5px;border-radius:3px;background:var(--rot);opacity:.85;height:6px;transition:height .08s}
 .uhr{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums}
@@ -200,7 +202,7 @@ body.mit-scan #s-start{--fest:352px}                              /* der Knopf �
 .knopf.haupt.gross{min-height:68px;font-size:24px}
 .knopf.haupt.gross svg{width:26px;height:26px}
 .knopf.klein{min-height:48px;width:auto;font-size:17px;border-radius:8px;border-width:1px;color:var(--leise)}
-.knopf.gruen{color:var(--gruen-t);border-color:var(--gruen);border-width:2px;border-radius:8px}
+.knopf.gruen{color:var(--gruen-t);border-color:var(--gruen-licht);border-width:2px;border-radius:8px}
 .knopf:disabled{opacity:.5}
 .knopf-stapel{padding:0 16px 26px;display:flex;flex-direction:column;gap:10px}
 .link-knopf{border:0;background:none;color:var(--leise);text-decoration:underline;font-size:15px;min-height:44px;padding:0 4px}
@@ -213,9 +215,9 @@ body.mit-scan #s-start{--fest:352px}                              /* der Knopf �
 .titel-block{padding:4px 20px 0;display:flex;flex-direction:column;gap:4px}
 .titel-block h1{margin:0;font-size:28px;line-height:1.2}
 .text-block{margin:14px 16px 0;display:flex;flex-direction:column;gap:6px}
-.text-block textarea{height:200px;resize:none;border-radius:8px;border:2px solid var(--gruen);background:var(--flaeche2);padding:14px 16px;font-size:21px;line-height:1.4}
+.text-block textarea{height:200px;resize:none;border-radius:8px;border:2px solid var(--gruen-licht);background:var(--flaeche2);padding:14px 16px;font-size:21px;line-height:1.4}
 /* Cloud-Erkennung: kleine Zeile unter dem Textfeld (läuft / fertig / Hinweis bei Ausfall) */
-.erkennung{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;margin-top:8px;padding:8px 12px;border-radius:8px;background:var(--flaeche);box-shadow:inset 0 0 0 1px var(--gruen);font-size:16px;line-height:1.35;color:var(--text)}
+.erkennung{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;margin-top:8px;padding:8px 12px;border-radius:8px;background:var(--flaeche);box-shadow:inset 0 0 0 1px var(--gruen-licht);font-size:16px;line-height:1.35;color:var(--text)}
 .erkennung[data-art=laeuft]{animation:erkennung-puls 1.4s ease-in-out infinite}
 .erkennung[data-art=fehler],.erkennung[data-art=leer]{background:var(--flaeche);box-shadow:inset 0 0 0 1px var(--gelb);color:var(--text)}
 .erkennung small{flex-basis:100%;font-size:13px;opacity:.85}
@@ -237,7 +239,7 @@ body.mit-scan #s-start{--fest:352px}                              /* der Knopf �
 .anhang-plus svg{width:26px;height:26px}
 
 /* Gesendet */
-.erfolg{margin:6px 16px 0;background:var(--flaeche);box-shadow:inset 0 0 0 1.5px var(--gruen);border-radius:8px;padding:20px;display:flex;align-items:center;gap:16px}
+.erfolg{margin:6px 16px 0;background:var(--flaeche);box-shadow:inset 0 0 0 1.5px var(--gruen-licht);border-radius:8px;padding:20px;display:flex;align-items:center;gap:16px}
 .erfolg>div:last-child{display:flex;flex-direction:column;gap:2px}
 .erfolg b{font-size:26px}
 .erfolg span{font-size:16px;line-height:1.35;color:var(--text)}
@@ -290,7 +292,7 @@ body.mit-scan #s-start{--fest:352px}                              /* der Knopf �
 .rund svg{width:30px;height:30px}
 
 /* Die Einblendung oben (neue Karte „Bestätigen?“): kurz sichtbar, antippen führt zur Karte */
-.einblendung{position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top));transform:translateX(-50%);background:var(--flaeche);color:var(--hell);border:0;outline:1px solid var(--gruen);padding:12px 18px;border-radius:8px;font-size:16px;max-width:calc(100% - 32px);z-index:25;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.25)}
+.einblendung{position:fixed;left:50%;top:calc(10px + env(safe-area-inset-top));transform:translateX(-50%);background:var(--flaeche);color:var(--hell);border:0;outline:1px solid var(--gruen-licht);padding:12px 18px;border-radius:8px;font-size:16px;max-width:calc(100% - 32px);z-index:25;text-align:center;box-shadow:0 4px 16px rgba(0,0,0,.25)}
 .meldung{position:fixed;left:50%;bottom:calc(110px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--flaeche);color:var(--hell);box-shadow:0 0 0 1px var(--linie),0 4px 16px rgba(0,0,0,.35);padding:12px 18px;border-radius:8px;font-size:16px;max-width:calc(100% - 32px);z-index:20;text-align:center}
 .code-feld::placeholder{text-transform:none;letter-spacing:normal;font-weight:400}
 
@@ -301,8 +303,8 @@ body.mit-scan #s-start{--fest:352px}                              /* der Knopf �
 .ist-test .screen{padding-top:0;min-height:calc(100dvh - var(--band,56px))}      /* --band: die wirkliche Höhe des Bandes (app.js, bandHoehe) */
 .modus{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:4px 16px 8px;padding:5px;background:var(--flaeche);border-radius:8px}
 .modus-wahl{min-height:52px;border:0;border-radius:8px;background:transparent;color:var(--leise);font-size:19px;font-weight:700}
-.modus-wahl[aria-pressed="true"]{background:var(--gruen);color:var(--auf-gruen)}
-.modus-wahl#m-test[aria-pressed="true"]{background:var(--test);color:var(--test-dunkel)}
+.modus-wahl[aria-pressed="true"]{background:var(--gruen);color:var(--auf-gruen);box-shadow:inset 0 0 0 2px var(--gruen-licht)}
+.modus-wahl#m-test[aria-pressed="true"]{background:var(--test);color:var(--test-dunkel);box-shadow:none}
 .knopf.haupt.test{background:var(--test);border-color:var(--test);color:var(--test-dunkel)}
 .chip.test{background:var(--test);color:var(--test-dunkel);font-weight:700}
 
@@ -317,7 +319,7 @@ body.mit-scan #s-start{--fest:352px}                              /* der Knopf �
 .post-text{flex:1;display:flex;flex-direction:column;min-width:0}
 .post-text b{font-size:17px;line-height:1.2}
 .post-text .klein{font-size:13.5px;line-height:1.25}
-.post-zaehler{min-width:28px;height:28px;padding:0 8px;border-radius:14px;background:var(--warn-rahmen);color:var(--auf-gruen);font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center;flex:none}
+.post-zaehler{min-width:28px;height:28px;padding:0 8px;border-radius:14px;background:var(--warn-rahmen);color:var(--tinte);font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center;flex:none}
 .ist-test .post-zaehler{background:var(--test);color:var(--test-dunkel)}
 .post-inhalt{padding:4px 16px 26px;display:flex;flex-direction:column;gap:10px}
 .post-inhalt .ueberschrift{padding-left:4px}
@@ -334,7 +336,7 @@ body.mit-scan #s-start{--fest:352px}                              /* der Knopf �
 .antwort-bereich{display:flex;flex-direction:column;gap:10px}
 .antworten{display:flex;flex-direction:column;gap:8px}
 .antwort-wahl{min-height:56px;border-radius:8px;border:2px solid var(--rahmen);background:var(--flaeche2);font-size:19px;font-weight:700;padding:8px 14px;text-align:left;overflow-wrap:anywhere}
-.antwort-wahl[aria-pressed="true"]{border-color:var(--gruen);background:var(--gruen-hell);color:var(--gruen-t)}
+.antwort-wahl[aria-pressed="true"]{border-color:var(--gruen-licht);background:var(--gruen-hell);color:var(--gruen-t)}
 .ist-test .antwort-wahl[aria-pressed="true"]{border-color:var(--test);background:#3b2d12;color:var(--text)}
 .antwort-text{height:56px;border-radius:8px;border:2px solid var(--rahmen);padding:0 16px;font-size:20px;background:var(--flaeche2);width:100%}
 .punkte{display:flex;flex-direction:column;gap:10px}
@@ -344,7 +346,7 @@ body.mit-scan #s-start{--fest:352px}                              /* der Knopf �
 .punkt-text b{font-size:18px}
 .dreier{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .dreier-wahl{min-height:52px;border-radius:8px;border:2px solid var(--rahmen);background:var(--flaeche2);font-size:18px;font-weight:700}
-.dreier-wahl[aria-pressed="true"][data-e="ja"]{background:var(--gruen);border-color:var(--gruen);color:var(--auf-gruen)}
+.dreier-wahl[aria-pressed="true"][data-e="ja"]{background:var(--gruen);border-color:var(--gruen-licht);color:var(--auf-gruen)}
 .dreier-wahl[aria-pressed="true"][data-e="nein"]{background:var(--rot);border-color:var(--rot);color:var(--auf-rot)}
 .dreier-wahl[aria-pressed="true"][data-e="spaeter"]{background:var(--hell-leise);border-color:var(--hell-leise);color:#1c2422}
 .zusammen{margin:0;text-align:center}
@@ -370,7 +372,7 @@ body.mit-scan #s-start{--fest:352px}                              /* der Knopf �
 .mic-seite-rund{width:48px;height:48px;border-radius:50%;border:1.5px solid var(--rahmen);background:var(--flaeche);display:flex;align-items:center;justify-content:center;color:var(--leise)}
 .mic-seite-rund svg{width:26px;height:26px}
 .mic-seite-text{font-size:12px;line-height:1.1;font-weight:700;color:var(--leise);white-space:nowrap;text-shadow:0 0 2px var(--grund),0 0 2px var(--grund),0 0 3px var(--grund),0 0 3px var(--grund)}      /* heller Saum: bleibt lesbar, wenn der Knopf auf ganz schmalen Handys über den dunklen Ring rückt */
-.mic-seite.gewaehlt .mic-seite-rund{border-width:2.5px;border-color:var(--gruen);background:var(--flaeche2);color:var(--hell)}
+.mic-seite.gewaehlt .mic-seite-rund{border-width:2.5px;border-color:var(--gruen-licht);background:var(--flaeche2);color:var(--hell)}
 .mic-seite.gewaehlt .mic-seite-text{color:var(--text)}
 .bereich-pruefen{display:block;margin-top:4px;font-weight:700;color:var(--gruen-t)}
 .bereich-hilfe{margin:4px 20px 0;font-size:15px}
@@ -383,7 +385,7 @@ body.mit-scan #s-start{--fest:352px}                              /* der Knopf �
 @media (max-height:760px){.kachel-gitter{gap:8px;padding:8px 16px 8px}.kachel{gap:6px;padding:6px}.kachel-ic svg{width:34px;height:34px}.kachel{font-size:15px}#s-bereich .knopf-stapel{padding-bottom:10px}#b-ohne-bereich{min-height:48px}}
 @media (max-height:600px){.kachel-ic svg{width:30px;height:30px}.kachel{font-size:14px;gap:3px;padding:4px}}
 .kachel b{font-weight:700}
-.kachel.an{border-color:var(--gruen);border-width:3px;background:var(--flaeche2)}
+.kachel.an{border-color:var(--gruen-licht);border-width:3px;background:var(--flaeche2)}
 
 /* Übersicht (Funktion „uebersicht“): Reiter, drei Zahlen, eine Tabelle */
 .ue-akt{display:flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:8px;border:1.5px solid var(--rahmen);background:var(--flaeche);font-size:15px;font-weight:700;color:var(--gruen-t);flex:none;margin-right:4px}
@@ -400,8 +402,8 @@ body.mit-scan #s-start{--fest:352px}                              /* der Knopf �
 .ue-reiter-leiste::-webkit-scrollbar{display:none}
 .ue-reiter{flex:none;display:flex;align-items:center;gap:6px;min-height:44px;padding:0 12px;border-radius:8px;border:1.5px solid var(--rahmen);background:var(--flaeche);color:var(--leise);font-size:15px;font-weight:700;white-space:nowrap}
 .ue-reiter svg{width:20px;height:20px;stroke:currentColor;stroke-width:1.8}
-.ue-reiter.an{color:var(--text);border-color:var(--gruen);background:var(--flaeche2);box-shadow:inset 0 -3px 0 var(--gruen)}
-.ue-reiter.an svg{stroke:var(--gruen)}
+.ue-reiter.an{color:var(--text);border-color:var(--gruen-licht);background:var(--flaeche2);box-shadow:inset 0 -3px 0 var(--gruen-licht)}
+.ue-reiter.an svg{stroke:var(--gruen-licht)}
 .ue-such{height:48px;border-radius:8px;border:1px solid var(--rahmen);background:var(--flaeche2);padding:0 14px;font-size:17px;width:100%}
 .ue-zahlen{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .ue-zahl{background:var(--flaeche);border:1px solid var(--linie);border-radius:8px;padding:10px;min-width:0}
@@ -422,7 +424,7 @@ body.mit-scan #s-start{--fest:352px}                              /* der Knopf �
 .ue-marke{display:inline-block;font-size:12px;font-weight:700;padding:1px 8px;border-radius:99px;margin-left:2px}
 .ue-marke.gelb{background:#3a3620;color:var(--gelb)}
 .ue-marke.rot{background:#402a2b;color:#ff9396}
-.ue-marke.gruen{background:var(--gruen-hell);color:var(--gruen)}
+.ue-marke.gruen{background:var(--gruen-hell);color:var(--gruen-licht)}
 .ue-hinweis,.ue-leer{margin:0;padding:12px 14px;color:var(--leise);font-size:15px;overflow-wrap:anywhere}
 /* Liste aller Maschinen (Reiter „Maschinen“): bei schmalem Handy läuft die Tabelle seitwärts, die Seite selbst nie */
 .ue-maschinen{background:var(--flaeche);border:1px solid var(--linie);border-radius:8px;overflow:hidden}
@@ -478,7 +480,7 @@ body.mit-scan #s-start{--fest:352px}                              /* der Knopf �
 .anzeige-lager .ue-stand{font-size:16px}
 
 /* Scannen (Funktion „scanner“, js/scan-ansicht.js) */
-.scan-start{margin-top:8px;min-height:48px;padding:0 24px;border-color:var(--gruen);border-width:2px;color:var(--gruen-t)}
+.scan-start{margin-top:8px;min-height:48px;padding:0 24px;border-color:var(--gruen-licht);border-width:2px;color:var(--gruen-t)}
 .scan-inhalt{padding:4px 16px 16px;display:flex;flex-direction:column;gap:12px}
 .scan-kamera{position:relative;width:100%;aspect-ratio:4/3;max-height:34dvh;border-radius:8px;background:#111;overflow:hidden;display:none}
 .scan-kamera.an{display:block}
@@ -507,8 +509,8 @@ body.mit-scan #s-start{--fest:352px}                              /* der Knopf �
 .untere-leiste{position:fixed;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:480px;z-index:9;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));background:var(--flaeche);border-top:1px solid var(--linie);height:calc(var(--nav) + env(safe-area-inset-bottom));padding:0 4px env(safe-area-inset-bottom)}
 .nav-punkt{position:relative;grid-row:1;border:0;background:transparent;color:var(--leise);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:var(--nav);padding:0;font-size:13px;font-weight:400;line-height:1.1}
 .nav-punkt svg{width:28px;height:28px}
-.nav-punkt[aria-current="true"]{color:var(--gruen)}
-.nav-punkt[aria-current="true"]::before{content:"";position:absolute;top:0;width:36px;height:4px;border-radius:0 0 4px 4px;background:var(--gruen)}
+.nav-punkt[aria-current="true"]{color:var(--gruen-licht)}
+.nav-punkt[aria-current="true"]::before{content:"";position:absolute;top:0;width:36px;height:4px;border-radius:0 0 4px 4px;background:var(--gruen-licht)}
 #nav-start{grid-column:1}
 #nav-uebersicht{grid-column:2}
 .nav-mitte{grid-column:3;grid-row:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:2px}
@@ -558,7 +560,7 @@ body.mit-leiste #s-gesendet .knopf-stapel{bottom:calc(var(--nav) + env(safe-area
 /* A037: Hof-Karte am Handy (Karte, Platz setzen, Maschinen antippen) */
 .karte-umschalter{display:flex;gap:8px;margin:0 0 10px}
 .karte-umschalter .knopf,.karte-standorte .knopf{min-height:44px}
-.karte-umschalter .knopf.an,.karte-standorte .knopf.an,.karte-liste .knopf.an{background:var(--gruen);color:var(--auf-gruen);border-color:var(--gruen)}
+.karte-umschalter .knopf.an,.karte-standorte .knopf.an,.karte-liste .knopf.an{background:var(--gruen);color:var(--auf-gruen);border-color:var(--gruen-licht)}
 .karte-standorte{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 10px}
 .karte-svg{display:block;width:100%;max-width:100%;height:auto;max-height:70vh;background:#E3EAD2;border:1px solid var(--linie);border-radius:14px;touch-action:none;user-select:none;-webkit-user-select:none}
 /* A050: eine Karte für alle Standorte: Umrandung und Überschrift je Standort, Beschriftung bleibt beim Zoomen gleich groß */
@@ -587,8 +589,8 @@ body.mit-leiste #s-gesendet .knopf-stapel{bottom:calc(var(--nav) + env(safe-area
 .karte-legende .hk-punkt::before{content:"";display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;background:#c9a98c}
 .karte-legende .hk-punkt.eigen::before{background:#8fc28a;border:2px solid #1F6F3F;box-sizing:border-box}
 .karte-legende .hk-punkt.osm::before{background:#b97b66}
-.karte-tippen{margin:0 0 8px;padding:10px 14px;border-radius:8px;background:var(--gruen-hell);border:1.5px solid var(--gruen);font-weight:700;color:var(--text)}
-.karte-meldung{margin:0 0 10px;padding:10px 14px;border-radius:8px;font-weight:700;background:var(--gruen-hell);border:1.5px solid var(--gruen)}
+.karte-tippen{margin:0 0 8px;padding:10px 14px;border-radius:8px;background:var(--gruen-hell);border:1.5px solid var(--gruen-licht);font-weight:700;color:var(--text)}
+.karte-meldung{margin:0 0 10px;padding:10px 14px;border-radius:8px;font-weight:700;background:var(--gruen-hell);border:1.5px solid var(--gruen-licht)}
 .karte-meldung.fehler{background:var(--warn-grund);border-color:var(--warn-rahmen);color:var(--warn-text)}
 .karte-panel,.karte-ohne{background:var(--flaeche);border:1px solid var(--linie);border-radius:8px;padding:12px 14px;margin:10px 0;display:flex;flex-direction:column;gap:10px}
 .karte-panel h2,.karte-ohne h2{font-size:19px;margin:0}
