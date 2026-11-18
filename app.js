@@ -5,7 +5,7 @@ import { packen, verschluesseln, fotoVerkleinern } from './js/paket.js';
 import { Aufnahme, liveTextMoeglich } from './js/sprache.js';
 import { ECHT, TEST, lesModus, schreibModus, normModus, testSchalterErlaubt, schluesselFuer, zielVon, testBlockiert, TEXTE } from './js/modus.js';
 import { ladeFunktionen, sichtbar as funktionSichtbar, anwenden as funktionenAnwenden } from './js/funktionen.js';
-import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon, dateiSchluessel, quittungFuer, uebersichtFuer, uebersichtGrundFuer, uebersichtFrageBauen, karteAuftragBauen, bestaetigungFuer, bestaetigungAntwortBauen, anmeldeHandyBauen, ANMELDE_JA, stationsProfil, SCAN_HANDGRIFFE } from './js/post.js';
+import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon, dateiSchluessel, quittungFuer, uebersichtFuer, uebersichtGrundFuer, uebersichtFrageBauen, karteAuftragBauen, bestaetigungFuer, bestaetigungAntwortBauen, anmeldeHandyBauen, belegOriginalFrageBauen, ANMELDE_JA, stationsProfil, SCAN_HANDGRIFFE } from './js/post.js';
 import { anmeldeBestaetigen, anmeldeHandyEinrichten } from './js/anmelden.js';
 import { zeichneKarte, einblendungText, WAHL_TEXT } from './js/bestaetigung-ansicht.js';
 import { zeichneReiter, zeichneInhalt, standText } from './js/uebersicht.js';
@@ -1122,11 +1122,13 @@ function uebersichtZeichnen() {
   const kopf = sicht && sicht.satz ? null : uebersichtFuer(postStand, modus);   // eine Station ohne Profil zeigt nichts – auch keinen älteren Stand
   const leiste = $('#ue-reiter');
   const links = leiste.scrollLeft;
+  const mitBelege = !sicht && belegeAktiv() && !!(kopf && kopf.belege);                          // A053: den Reiter „Belege“ gibt es nur für Verwalter-Handys, mit Freigabe und mit Liste vom Laptop
   const mitHof = funktionAktiv('hof') && !!(kopf && kopf.hof && kopf.hof.karte === 'ok');       // den Reiter „Hof“ gibt es nur mit Freigabe und nur, wenn der Laptop eine Hof-Karte geschickt hat
   const nur = sicht ? sicht.reiter.filter(name => name !== 'hof' || mitHof) : null;
   if (nur && !nur.includes(ueReiter)) { ueReiter = nur[0] || ''; ueHofWahl = ''; }
   if (!nur && ueReiter === 'hof' && !mitHof) ueReiter = 'lager';
-  zeichneReiter(leiste, ueReiter, name => { if (!ANZEIGE) { ueReiter = name; ueHofWahl = ''; uebersichtZeichnen(); uebersichtAuto('reiter'); } }, mitHof, nur);
+  if (ueReiter === 'belege' && !mitBelege) ueReiter = 'lager';
+  zeichneReiter(leiste, ueReiter, name => { if (!ANZEIGE) { ueReiter = name; ueHofWahl = ''; uebersichtZeichnen(); uebersichtAuto('reiter'); } }, mitHof, nur, mitBelege);
   leiste.scrollLeft = links;
   const ohneReiter = !!nur && !nur.length;
   leiste.hidden = ohneReiter;
@@ -1138,7 +1140,7 @@ function uebersichtZeichnen() {
     satz.textContent = sicht.satz || (sicht.reiter.length ? STATION_HOF_FEHLT : STATION_OHNE_REITER);
     $('#ue-seite').replaceChildren(satz);
   } else {
-    zeichneInhalt($('#ue-seite'), kopf, ueReiter, ueSuche, ueHofWahl, id => { ueHofWahl = id; uebersichtZeichnen(); }, ANZEIGE ? null : bestellungOeffnen, kartenKontext());
+    zeichneInhalt($('#ue-seite'), kopf, ueReiter, ueSuche, ueHofWahl, id => { ueHofWahl = id; uebersichtZeichnen(); }, ANZEIGE ? null : bestellungOeffnen, kartenKontext(), mitBelege ? belegeKontext() : null);
     if (sicht && !sicht.handgriffe.includes('sprechen')) for (const p of $$('#ue-seite .ue-leer-satz')) p.textContent = STATION_LEER;      // ohne „sprechen“ keine Aufforderung „Sag z. B. …“
   }
   const stand = kopf ? standText(kopf.stand) : '';
@@ -1172,6 +1174,48 @@ async function uebersichtAktualisieren() {
     ueStatus = testBlockiert(ziel, code) ? TEXTE.testNichtBereit : code === 'netz' ? 'Kein Netz – das ist der letzte Stand.'
       : code === 'bremse' ? 'Bitte kurz warten und noch einmal tippen.' : 'Das Fragen ging nicht.';
   } finally { ueFragt = false; uebersichtZeichnen(); }
+}
+// ---------- Belege (Funktion „belege“, A053) ----------
+// Der Reiter „Belege“ der Übersicht: Rechnungen und Lieferscheine nach Betrieb, mit Suche. Die Liste reist mit dem Stand vom Laptop (nur Angaben). „Original holen“ schickt eine kleine
+// beglaubigte Anfrage; der Laptop legt die PDF als Karte „Für dich“ in die Post dieses Handys (der vorhandene Weg) und antwortet mit einem Satz. Nur Verwalter-Handys.
+const BELEG_WARTEN_MS = 60000;
+const be = { betrieb: '', art: '', offen: '', meldung: '', laeuft: false };
+function belegeAktiv() {
+  return !ANZEIGE && !!geraet && geraet.status === 'frei' && geraet.rolle === 'admin' && funktionAktiv('belege') && funktionAktiv('uebersicht') && funktionAktiv('rueckfragen') && funktionAktiv('fuer_dich');
+}
+function belegeKontext() {
+  return {
+    get betrieb() { return be.betrieb; }, get art() { return be.art; }, get offen() { return be.offen; }, get meldung() { return be.meldung; }, get laeuft() { return be.laeuft; },
+    setzeBetrieb: b => { be.betrieb = b; be.offen = ''; be.meldung = ''; uebersichtZeichnen(); },
+    setzeArt: a => { be.art = a; be.offen = ''; be.meldung = ''; uebersichtZeichnen(); },
+    toggle: id => { be.offen = be.offen === id ? '' : id; be.meldung = ''; uebersichtZeichnen(); },
+    original: id => belegOriginalHolen(id),
+  };
+}
+async function belegOriginalHolen(id) {
+  if (be.laeuft) return;
+  const fertig = text => { be.meldung = text; be.laeuft = false; uebersichtZeichnen(); };
+  if (!belegeAktiv() || !postAktiv()) return fertig('Dieses Handy darf Belege nicht holen.');
+  const ziel = modus;
+  if (!navigator.onLine) return fertig('Kein Netz – das Original wurde nicht angefragt.');
+  const privatKey = await privaterSchluessel();
+  if (!privatKey || !schluesselFuer(config, ziel)) return fertig('Dieses Handy kann gerade nicht fragen. Bitte Claude Bescheid geben.');
+  be.laeuft = true; be.meldung = ''; uebersichtZeichnen();
+  try {
+    const r = await belegOriginalFrageBauen({ beleg: id, instanz: ziel, geraet, config, privatKey });
+    await kasten.senden(geraet.token, r.id, new Blob([r.umschlag], { type: 'application/octet-stream' }), ziel);
+    const ende = Date.now() + BELEG_WARTEN_MS;
+    while (Date.now() < ende) {
+      await new Promise(ok => setTimeout(ok, 1200));
+      await postHolen();
+      const g = uebersichtGrundFuer(postStand, ziel);
+      if (g && g.frage === r.id) return fertig(g.grund);
+    }
+    fertig('Der Laptop antwortet nicht – ist er an?');
+  } catch (err) {
+    const code = err instanceof BriefkastenFehler ? err.code : '';
+    fertig(testBlockiert(ziel, code) ? TEXTE.testNichtBereit : code === 'netz' ? 'Kein Netz – das Original wurde nicht angefragt.' : code === 'bremse' ? 'Bitte kurz warten und noch einmal tippen.' : 'Das Fragen ging nicht.');
+  }
 }
 // ---------- Die Hof-Karte am Handy bearbeiten (Funktion „hofkarte_bearbeiten“, A037) ----------
 // Dieselbe Hof-Karte wie am Laptop (Reiter „Hof“ in der Übersicht): Namen ändern, Platz setzen, Neues ergänzen, Eigenes ausblenden – und Maschinen antippen,
@@ -1243,7 +1287,7 @@ $('#b-ue-neu').addEventListener('click', () => uebersichtAktualisieren());
 $('#ue-such').addEventListener('input', e => {
   ueSuche = e.target.value;
   if (stationFrei()) { uebersichtZeichnen(); return; }                          // Station: immer über ihr Profil zeichnen
-  zeichneInhalt($('#ue-seite'), uebersichtFuer(postStand, modus), ueReiter, ueSuche, ueHofWahl, id => { ueHofWahl = id; uebersichtZeichnen(); }, ANZEIGE ? null : bestellungOeffnen, kartenKontext());
+  zeichneInhalt($('#ue-seite'), uebersichtFuer(postStand, modus), ueReiter, ueSuche, ueHofWahl, id => { ueHofWahl = id; uebersichtZeichnen(); }, ANZEIGE ? null : bestellungOeffnen, kartenKontext(), ueReiter === 'belege' && belegeAktiv() ? belegeKontext() : null);
 });
 $('#b-zurueck-bestellung').addEventListener('click', () => history.back());
 

@@ -643,3 +643,20 @@ body.station .untere-leiste>*{flex:1 1 0;min-width:0}
 .anmelde-fehler{color:var(--rot-t)}
 .anmelde-aktion{display:flex;flex-direction:column;margin-top:10px}
 .anmelde-aktion .knopf{width:100%}
+
+/* A053: Belege (Reiter der Übersicht) */
+.be-wahl{display:flex;flex-wrap:wrap;gap:6px}
+.be-knopf{min-height:44px;padding:0 12px;border-radius:8px;border:1.5px solid var(--rahmen);background:var(--flaeche);color:var(--leise);font-size:15px;font-weight:700}
+.be-knopf.an{color:var(--text);border-color:var(--gruen-licht);background:var(--flaeche2)}
+.be-zeile{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;width:100%;min-height:56px;padding:10px 14px;background:none;border:0;border-top:1px solid var(--linie);color:var(--text);text-align:left;font-size:16px}
+.be-monat h2+.be-zeile{border-top:0}
+.be-zeile.an{background:var(--flaeche2)}
+.be-links{min-width:0;display:flex;flex-direction:column;gap:2px}
+.be-name{font-weight:700;overflow-wrap:anywhere}
+.be-unter{font-size:14px;color:var(--leise);overflow-wrap:anywhere}
+.be-rechts{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:4px;max-width:45%}
+.be-detail{padding:6px 14px 14px;background:var(--flaeche2);border-top:1px solid var(--linie)}
+.be-feld{margin:4px 0;font-size:15px;overflow-wrap:anywhere}
+.be-fname{display:inline-block;min-width:5.5em;color:var(--leise)}
+.be-klein{margin:6px 0 0;font-size:13px;color:var(--leise)}
+.be-original{margin-top:8px;width:100%}

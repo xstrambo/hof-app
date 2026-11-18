@@ -3,6 +3,7 @@
 import { UEBERSICHT_TABS } from './post.js';
 import { HOF_REITER, zeichneHof } from './hof-ansicht.js';
 import { zeichneMaschDetail, zeichneEntfernt } from './karte-ansicht.js';
+import { BELEGE_REITER, zeichneBelege } from './belege-ansicht.js';
 
 export const REITER = {
   lager: { name: 'Warenlager', farbe: '#2e9d6a', icon: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>' },
@@ -54,11 +55,11 @@ export function passt(zeile, suche) {
 // Die Reiter-Leiste (Knöpfe). beiWahl(name) wird beim Antippen gerufen.
 // mitHof: der Reiter „Hof“ (Funktion „hof“) kommt ans Ende, wenn die Funktion für dieses Handy gilt.
 // nur (optional): eine Liste von Reiter-Namen – dann stehen nur diese da, in der gewohnten Reihenfolge (eine Station, A055, zeigt nur die Reiter ihres Profils).
-export function zeichneReiter(wurzel, aktiv, beiWahl, mitHof = false, nur = null) {
+export function zeichneReiter(wurzel, aktiv, beiWahl, mitHof = false, nur = null, mitBelege = false) {
   wurzel.replaceChildren();
-  const alle = mitHof ? [...UEBERSICHT_TABS, 'hof'] : UEBERSICHT_TABS;
+  const alle = [...UEBERSICHT_TABS, ...(mitHof ? ['hof'] : []), ...(mitBelege ? ['belege'] : [])];      // „belege“ (A053): nur Verwalter-Handys, nur mit Freigabe und mit Liste vom Laptop
   for (const name of Array.isArray(nur) ? alle.filter(n => nur.includes(n)) : alle) {
-    const r = name === 'hof' ? HOF_REITER : REITER[name];
+    const r = name === 'hof' ? HOF_REITER : name === 'belege' ? BELEGE_REITER : REITER[name];
     const b = el('button', 'ue-reiter' + (name === aktiv ? ' an' : ''));
     b.type = 'button';
     b.dataset.reiter = name;
@@ -139,8 +140,9 @@ export const LEER_TEXT = {
 export const KEINE_MASCHINEN = 'Noch keine Maschinen angelegt – sag z. B. „Neue Maschine Fendt 724, 240 PS“.';
 
 // Der Inhalt eines Reiters. kopf = der geprüfte Stand (oder null: noch keiner da). beiBestellung(d): eine Zeile mit Einzelheiten (Vorbestellungen) wurde angetippt.
-export function zeichneInhalt(wurzel, kopf, name, suche, hofWahl = '', beiHofWahl = () => {}, beiBestellung = null, kk = null) {
+export function zeichneInhalt(wurzel, kopf, name, suche, hofWahl = '', beiHofWahl = () => {}, beiBestellung = null, kk = null, bk = null) {
   wurzel.replaceChildren();
+  if (name === 'belege') { zeichneBelege(wurzel, kopf && kopf.belege ? kopf.belege : null, suche, bk); return; }
   if (name === 'hof') { zeichneHof(wurzel, kopf && kopf.hof ? kopf.hof : null, hofWahl, suche, beiHofWahl, kk); return; }
   const tab = kopf && kopf.tabs ? kopf.tabs[name] : null;
   if (!tab) { wurzel.append(el('p', 'ue-leer', kopf ? 'Dazu gibt es auf dem Laptop gerade nichts.' : 'Noch kein Stand. Tippe oben auf Aktualisieren.')); return; }

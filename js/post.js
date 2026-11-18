@@ -389,6 +389,33 @@ export function profilKopf(p) {
   return istObjekt(p) ? { reiter: bekannt(p.reiter, STATION_REITER), handgriffe: bekannt(p.handgriffe, STATION_HANDGRIFFE) } : { reiter: [], handgriffe: [] };
 }
 
+// Die Belege (Funktion „belege“, A053): Rechnungen und Lieferscheine aus dem Verzeichnis des Laptops – nur Angaben, nie die Dateien. Streng geprüft und gekürzt, nur Text.
+// Je Zeile: i Kennung, a Art, d Datum (JJJJ-MM-TT), s Absender, b Betrieb (Kennung, leer = nicht belegt), n Nummer, v Betrag, f Fälligkeit (JJJJ-MM-TT), p Prüfstatus der Rechnung,
+// t Textauszug, o 1 = das Original lässt sich aufs Handy holen. Was fehlt, bleibt leer – nichts wird ergänzt.
+export const BELEGE_MAX_ZEILEN = 800;
+export const BELEG_PRUEFUNG = ['passt', 'weicht ab', 'kein Lieferschein', 'nicht prüfbar'];
+const BELEG_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,29}$/;
+const TAG = /^\d{4}-\d{2}-\d{2}$/;
+export function belegeListe(b) {
+  if (!istObjekt(b)) return null;
+  const betriebe = [];
+  for (const x of (Array.isArray(b.betriebe) ? b.betriebe : []).slice(0, 6)) {
+    if (!istObjekt(x)) continue;
+    const i = einzeilig(x.i, 30), n = einzeilig(x.n, 60);
+    if (i && n && !betriebe.some(y => y.i === i)) betriebe.push({ i, n });
+  }
+  const zeilen = [];
+  for (const r of (Array.isArray(b.zeilen) ? b.zeilen : []).slice(0, BELEGE_MAX_ZEILEN)) {
+    if (!istObjekt(r) || typeof r.i !== 'string' || !BELEG_ID.test(r.i)) continue;
+    const a = einzeilig(r.a, 30);
+    if (!a) continue;
+    zeilen.push({ i: r.i, a, d: typeof r.d === 'string' && TAG.test(r.d) ? r.d : '', s: einzeilig(r.s, 60), b: einzeilig(r.b, 30), n: einzeilig(r.n, 30), v: einzeilig(r.v, 24),
+                  f: typeof r.f === 'string' && TAG.test(r.f) ? r.f : '', p: BELEG_PRUEFUNG.includes(r.p) ? r.p : '', t: einzeilig(r.t, 80), o: r.o === 1 });
+  }
+  const arten = [...new Set(zeilen.map(z => z.a))];
+  return { hinweis: einzeilig(b.hinweis, 240), betriebe, arten, zeilen, mehr: Number.isInteger(b.mehr) && b.mehr > 0 && b.mehr < 1e6 ? b.mehr : 0 };
+}
+
 export function uebersichtKopf(k) {
   if (!istObjekt(k) || k.art !== 'uebersicht' || k.version !== 1) return null;
   const id = typeof k.id === 'string' ? k.id : '';
@@ -400,8 +427,9 @@ export function uebersichtKopf(k) {
   if (!Object.keys(tabs).length && !profil) return null;                 // ohne Profil wie bisher: mindestens ein Reiter. Eine Station kann auch nur Handgriffe haben (dann kommt kein Reiter mit, oder nur die Artikelliste `scan` im Reiter „lager“)
   if (profil && tabs.best) for (const z of tabs.best.tabelle.zeilen) if (z.d) { delete z.d.kontakt; delete z.d.notiz; }      // eine Station sieht nie Kontakt und Notiz einer Bestellung (der Laptop lässt beides schon weg)
   const hof = k.hof !== undefined ? hofListe(k.hof) : null;           // Gebäude-Infos (Funktion „hof“); fehlen sie, bleibt alles andere, wie es war
+  const belege = !profil && k.belege !== undefined ? belegeListe(k.belege) : null;           // A053: nur im Stand für ein Verwalter-Handy
   const ergebnis = istObjekt(k.ergebnis) && typeof k.ergebnis.ok === 'boolean' && einzeilig(k.ergebnis.text, 200) ? { ok: k.ergebnis.ok, text: einzeilig(k.ergebnis.text, 200) } : null;      // das Ergebnis eines Auftrags (A037)
-  return { id, frage: typeof k.frage === 'string' && UUID.test(k.frage) ? k.frage : '', stand, gesendet: zeitText(k.gesendet), tabs, ...(hof ? { hof } : {}), ...(ergebnis ? { ergebnis } : {}),
+  return { id, frage: typeof k.frage === 'string' && UUID.test(k.frage) ? k.frage : '', stand, gesendet: zeitText(k.gesendet), tabs, ...(hof ? { hof } : {}), ...(belege ? { belege } : {}), ...(ergebnis ? { ergebnis } : {}),
            ...(profil ? { profil } : {}) };
 }
 
@@ -790,6 +818,20 @@ export async function uebersichtFrageBauen({ instanz, geraet, config, privatKey,
   const laptop = schluesselFuer(config, instanz);
   if (!laptop) throw new Error('kein Schlüssel');
   const kopf = { art: 'uebersicht_frage', id: crypto.randomUUID(), ziel: instanz, von: geraet.name, geraet: geraet.id, erstellt: jetzt.toISOString() };
+  const mac = await macSchluessel(privatKey, laptop, H2L);
+  const klar = await packen(kopf, []);
+  return { id: kopf.id, umschlag: await verschluesseln(await beglaubigen(klar, mac), laptop), instanz };
+}
+
+// ---- Das Original eines Belegs holen (Funktion „belege“, A053) ------------------------------------------------------------------
+// Eine kleine beglaubigte Anfrage (Art „beleg_original_frage“: nur die Kennung des Belegs). Der Laptop prüft und legt das Original als Karte „Für dich“ in die Post
+// dieses Handys (der vorhandene Weg); als Antwort kommt ein kurzer Satz (Art „uebersicht_grund“, Kennung der Anfrage). Sie geht gleich in den Briefkasten, nicht durch die Warteschlange.
+export async function belegOriginalFrageBauen({ beleg, instanz, geraet, config, privatKey, jetzt = new Date() }) {
+  if (typeof beleg !== 'string' || !BELEG_ID.test(beleg)) throw new Error('Beleg gibt es nicht');
+  instanz = normModus(instanz);
+  const laptop = schluesselFuer(config, instanz);
+  if (!laptop) throw new Error('kein Schlüssel');
+  const kopf = { art: 'beleg_original_frage', id: crypto.randomUUID(), beleg, ziel: instanz, von: geraet.name, geraet: geraet.id, erstellt: jetzt.toISOString() };
   const mac = await macSchluessel(privatKey, laptop, H2L);
   const klar = await packen(kopf, []);
   return { id: kopf.id, umschlag: await verschluesseln(await beglaubigen(klar, mac), laptop), instanz };
