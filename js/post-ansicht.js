@@ -118,8 +118,79 @@ function dingKarte(d, ctx) {
   return karte;
 }
 
+// Die Karte „Anmeldung“ (A064): Darf sich die Hof-App bei einer Internetseite anmelden? Gezeigt wird genau das, was unterschrieben wird (der Block „anmeldung“ der Frage),
+// nie der freie Text der Frage. „Ja, anmelden“ verlangt am Handy Fingerabdruck, Gesicht oder PIN (das macht app.js über ctx.beiAnmeldung); abgelaufen: keine Knöpfe.
+// ctx.beiAnmeldung(f, 'ja' | 'nein') -> Promise<{ ok, satz?, einrichten? }>, ctx.beiEinrichten() führt zu „Freigaben“, ctx.jetzt() -> Millisekunden.
+function uhrZeit(iso) { return typeof iso === 'string' && iso.length >= 16 ? iso.slice(11, 16) : ''; }
+function abgelaufen(a, jetzt) { const t = new Date(a.gueltig_bis).getTime(); return !Number.isFinite(t) || jetzt >= t; }
+
+function anmeldeKarte(f, ctx) {
+  const k = f.kopf, a = k.anmeldung;
+  const key = `${f.instanz}:${f.id}`;
+  const karte = el('article', 'frage anmeldung' + (f.instanz === TEST ? ' test' : ''));
+  karte.dataset.key = key;
+  karte.dataset.frage = f.id;
+  karte.dataset.art = 'anmeldung';
+  const kopf = el('div', 'eintrag-fuss');
+  kopf.appendChild(el('b', 'anm-titel', 'Anmeldung'));
+  if (f.instanz === TEST) { const c = chip('Test'); c.classList.add('test'); kopf.appendChild(c); }
+  karte.appendChild(kopf);
+  karte.appendChild(el('p', 'anm-seite', a.seite));
+  karte.appendChild(el('p', 'anm-adresse leise', a.adresse));
+  karte.appendChild(el('p', 'anm-zeile', `Gefragt von: ${a.wer}`));
+  karte.appendChild(el('p', 'anm-zeile', `Wofür: ${a.grund}`));
+  karte.appendChild(el('p', 'anm-zeile anm-bis', `Gilt bis ${uhrZeit(a.gueltig_bis)} Uhr`));
+
+  const eigene = f.meine && f.meine.stand === k.stand ? f.meine : null;
+  if (eigene) {                                                      // schon geantwortet: warten auf die Bestätigung des Laptops
+    const box = el('div', 'frage-gesendet');
+    box.appendChild(el('b', null, 'Deine Antwort'));
+    box.appendChild(el('span', 'frage-antwort', eigene.text));
+    box.appendChild(el('span', 'leise klein', STATUS_TEXT[ctx.status.get(eigene.id)] || STATUS_TEXT.gesendet));
+    karte.appendChild(box);
+    return karte;
+  }
+  const jetzt = () => (typeof ctx.jetzt === 'function' ? ctx.jetzt() : Date.now());
+  const satz = el('p', 'anm-satz leise');
+  satz.setAttribute('role', 'status');
+  satz.hidden = true;
+  const knoepfe = el('div', 'anm-knoepfe');
+  const ja = el('button', 'knopf haupt' + (f.instanz === TEST ? ' test' : ''), 'Ja, anmelden');
+  ja.type = 'button';
+  ja.dataset.aktion = 'anmelden-ja';
+  const nein = el('button', 'knopf neben', 'Nein');
+  nein.type = 'button';
+  nein.dataset.aktion = 'anmelden-nein';
+  knoepfe.append(ja, nein);
+  const einrichten = el('button', 'knopf neben', 'Jetzt einrichten');
+  einrichten.type = 'button';
+  einrichten.dataset.aktion = 'anmelden-einrichten';
+  einrichten.hidden = true;
+  einrichten.addEventListener('click', () => ctx.beiEinrichten());
+  const zuEnde = () => { knoepfe.hidden = true; einrichten.hidden = true; satz.hidden = false; satz.textContent = 'Abgelaufen.'; };
+  const wahl = async art => {
+    if (abgelaufen(a, jetzt())) { zuEnde(); return; }
+    ja.disabled = nein.disabled = true;
+    satz.hidden = true; einrichten.hidden = true;
+    let r = { ok: false };
+    try { r = (await ctx.beiAnmeldung(f, art)) || { ok: false }; }
+    catch { r = { ok: false, satz: 'Nicht bestätigt. Du kannst es noch einmal versuchen.' }; }
+    finally { if (!r.ok) ja.disabled = nein.disabled = false; }
+    if (!r.ok && r.satz) { satz.textContent = r.satz; satz.hidden = false; }
+    einrichten.hidden = !(r && r.einrichten);
+  };
+  ja.addEventListener('click', () => wahl('ja'));
+  nein.addEventListener('click', () => wahl('nein'));
+  karte.append(knoepfe, satz, einrichten);
+  const rest = new Date(a.gueltig_bis).getTime() - jetzt();
+  if (!(rest > 0)) zuEnde();
+  else if (rest < 24 * 36e5) setTimeout(() => { if (karte.isConnected) zuEnde(); }, rest + 50);   // läuft die Zeit ab, während die Karte offen steht: die Knöpfe verschwinden
+  return karte;
+}
+
 function frageKarte(f, ctx) {
   const k = f.kopf;
+  if (k.frage_art === 'anmeldung' && k.anmeldung) return anmeldeKarte(f, ctx);
   const key = `${f.instanz}:${f.id}`;
   const karte = el('article', 'frage' + (f.instanz === TEST ? ' test' : ''));
   karte.dataset.key = key;

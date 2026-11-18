@@ -627,3 +627,19 @@ body.station #b-zurueck-uebersicht{display:none}                         /* die 
 body.station #s-uebersicht .zurueck-kopf{padding-left:20px}
 body.station .untere-leiste{display:flex}                                 /* die Leiste zeigt nur, was die Station hat – die Einträge teilen sich die Breite */
 body.station .untere-leiste>*{flex:1 1 0;min-width:0}
+
+/* Anmeldungen bestätigen (A064): die Karte „Anmeldung“ in der Post und die Karte unter „Freigaben“ */
+.frage.anmeldung{gap:8px}
+.anm-titel{font-size:17px;color:var(--orange)}
+.anm-seite{margin:0;font-size:28px;line-height:1.15;font-weight:700;overflow-wrap:anywhere}
+.anm-adresse{margin:0;font-size:16px;overflow-wrap:anywhere}
+.anm-zeile{margin:0;font-size:18px;line-height:1.35;overflow-wrap:anywhere}
+.anm-bis{font-weight:700}
+.anm-knoepfe{display:flex;flex-direction:column;gap:10px;margin-top:4px}
+.anm-knoepfe .knopf,.frage.anmeldung>.knopf{width:100%}
+.anm-satz{margin:0;font-size:17px;line-height:1.35;overflow-wrap:anywhere}
+.anmelde-stand,.anmelde-fehler{margin:0;overflow-wrap:anywhere}
+.anmelde-stand{color:var(--gruen-t);font-weight:700}
+.anmelde-fehler{color:var(--rot-t)}
+.anmelde-aktion{display:flex;flex-direction:column;margin-top:10px}
+.anmelde-aktion .knopf{width:100%}

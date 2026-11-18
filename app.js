@@ -5,7 +5,8 @@ import { packen, verschluesseln, fotoVerkleinern } from './js/paket.js';
 import { Aufnahme, liveTextMoeglich } from './js/sprache.js';
 import { ECHT, TEST, lesModus, schreibModus, normModus, testSchalterErlaubt, schluesselFuer, zielVon, testBlockiert, TEXTE } from './js/modus.js';
 import { ladeFunktionen, sichtbar as funktionSichtbar, anwenden as funktionenAnwenden } from './js/funktionen.js';
-import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon, dateiSchluessel, quittungFuer, uebersichtFuer, uebersichtGrundFuer, uebersichtFrageBauen, karteAuftragBauen, bestaetigungFuer, bestaetigungAntwortBauen, stationsProfil, SCAN_HANDGRIFFE } from './js/post.js';
+import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon, dateiSchluessel, quittungFuer, uebersichtFuer, uebersichtGrundFuer, uebersichtFrageBauen, karteAuftragBauen, bestaetigungFuer, bestaetigungAntwortBauen, anmeldeHandyBauen, ANMELDE_JA, stationsProfil, SCAN_HANDGRIFFE } from './js/post.js';
+import { anmeldeBestaetigen, anmeldeHandyEinrichten } from './js/anmelden.js';
 import { zeichneKarte, einblendungText, WAHL_TEXT } from './js/bestaetigung-ansicht.js';
 import { zeichneReiter, zeichneInhalt, standText } from './js/uebersicht.js';
 import { zeichneBestellung } from './js/bestellung-ansicht.js';
@@ -97,7 +98,7 @@ function zeige(id, { verlauf = true } = {}) {
   window.scrollTo(0, 0);
   if (id === 's-start' || id === 's-gesendet') zeichneListen();
   if (id === 's-start') bereichAnzeigen();                    // zeigt auch den Hinweis (er hängt davon ab, ob die Cloud-Erkennung gerade pausiert) und den gewählten Bereich
-  if (id === 's-freigaben') ladeFreigaben();
+  if (id === 's-freigaben') { ladeFreigaben(); anmeldeKarteZeigen(); }
   if (id === 's-post') { postZeichnen(true); postHolen(); }
   if (id === 's-uebersicht') { uebersichtZeichnen(); uebersichtAuto(vorher === 's-bestellung' ? 'zurueck' : 'oeffnen'); }              // A040: die Übersicht holt beim Öffnen selbst (nicht beim Zurück von der Bestellkarte)
   if (id === 's-bestellung') bestellungZeichnen();
@@ -931,7 +932,7 @@ async function postZeichnen(erzwingen = false) {
   try { for (const n of await nachrichten.alle()) if (n.art === 'antwort') status.set(n.id, n.status); } catch { /* ohne Status */ }
   const zeigen = sichtbareFragen(postStand, modus, aenderungenAktiv());
   const ctx = {
-    stand: postStand, modus, aenderungenAktiv: aenderungenAktiv(), dingeAktiv: dingeAktiv(), entwuerfe: postEntwuerfe, status, beiAntwort: postAntworten, beiDing: postDing,
+    stand: postStand, modus, aenderungenAktiv: aenderungenAktiv(), dingeAktiv: dingeAktiv(), entwuerfe: postEntwuerfe, status, beiAntwort: postAntworten, beiDing: postDing, beiAnmeldung: postAnmeldung, beiEinrichten: () => zeige('s-freigaben'), jetzt: () => Date.now(),
     zeit: iso => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : zeitText(d.getTime()); },
     hinweis: postFehler === 'nicht_bereit' ? (modus === TEST ? 'Der Test-Briefkasten kann das noch nicht. Bitte Claude Bescheid geben.' : 'Der Briefkasten kann das noch nicht.')
       : postFehler === 'netz' ? 'Kein Netz – die Liste ist vom letzten Mal.' : postFehler === 'fehler' ? 'Das Aktualisieren hat nicht geklappt. Gleich noch ein Versuch.' : '',
@@ -998,6 +999,80 @@ async function postAntworten(f, antwort) {
     meldung('Die Antwort ging nicht. Bitte nochmal versuchen.', 5000);
     return false;
   }
+}
+
+// ---------- Anmeldungen bestätigen (Funktion „anmelde_freigabe“, A064) ----------
+// Wenn sich die Hof-App am Laptop bei einer Internetseite anmelden soll, kommt hier eine Karte „Anmeldung“. „Ja, anmelden“ verlangt am Handy Fingerabdruck, Gesicht oder PIN
+// (WebAuthn, js/anmelden.js) und unterschreibt genau diese Anfrage; die Antwort geht mit dem Nachweis zum Laptop. Vorher richtet Niklas das Handy einmal unter „Freigaben“ ein:
+// Das Handy legt einen Schlüssel an, der nur nach Fingerabdruck benutzbar ist; Kennung und öffentlicher Schlüssel (nichts Geheimes) gehen als Meldung „anmelde_handy“ zum Laptop,
+// die Kennung merkt sich die App (Speicher „anmelde-handy“).
+const ANMELDE_SPEICHER = 'anmelde-handy';
+const kannWebAuthn = () => typeof window.PublicKeyCredential === 'function' && !!navigator.credentials && typeof navigator.credentials.create === 'function';
+async function anmeldeHandyLesen() {
+  try {
+    const h = await einstellung.hole(ANMELDE_SPEICHER);
+    return h && typeof h.kennung === 'string' && h.kennung && Number.isFinite(h.am) ? h : null;
+  } catch { return null; }
+}
+const datumText = ms => new Date(ms).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+let anmeldeBusy = false;
+async function anmeldeKarteZeigen(fehlerBehalten = false) {
+  const karte = $('#anmelde-karte');
+  if (!karte) return;
+  karte.hidden = geraet?.rolle !== 'admin';
+  const stand = $('#anmelde-stand'), knopf = $('#b-anmelde-einrichten'), fehler = $('#anmelde-fehler');
+  if (!fehlerBehalten) fehler.hidden = true;
+  if (!kannWebAuthn()) { stand.textContent = 'Dieses Handy kann das nicht.'; stand.hidden = false; knopf.hidden = true; return; }
+  const h = await anmeldeHandyLesen();
+  stand.textContent = h ? `Eingerichtet am ${datumText(h.am)}.` : '';
+  stand.hidden = !h;
+  knopf.hidden = false;
+  knopf.textContent = h ? 'Neu einrichten' : 'Dieses Handy einrichten';
+  knopf.classList.toggle('haupt', !h);                                   // schon eingerichtet: „Neu einrichten“ ist ein unauffälliger zweiter Knopf
+  knopf.classList.toggle('neben', !!h);
+}
+async function anmeldeEinrichten() {
+  if (anmeldeBusy || !kannWebAuthn() || !geraet || geraet.rolle !== 'admin') return false;
+  anmeldeBusy = true;
+  const knopf = $('#b-anmelde-einrichten'), fehler = $('#anmelde-fehler');
+  knopf.disabled = true; fehler.hidden = true;
+  const zeigeFehler = t => { fehler.textContent = t; fehler.hidden = false; };
+  try {
+    const privatKey = schluesselFuer(config, modus) ? await privaterSchluessel() : null;
+    if (!privatKey) { zeigeFehler('Das Einrichten geht gerade nicht (Schlüssel fehlt). Bitte Claude Bescheid geben.'); return false; }
+    let neu;
+    try { neu = await anmeldeHandyEinrichten(geraet.name); }
+    catch { zeigeFehler('Nicht eingerichtet. Du kannst es noch einmal versuchen.'); return false; }
+    try {
+      const r = await anmeldeHandyBauen({ kennung: neu.kennung, schluessel: neu.schluessel, instanz: modus, geraet, config, privatKey });
+      await nachrichten.speichere({
+        id: r.id, erstellt: Date.now(), status: 'wartet', ziel: r.instanz, art: 'antwort', frage: 'anmelde-handy',
+        vorschau: 'Handy für Anmeldungen eingerichtet', sprache: 0, fotos: 0, doks: 0,
+        umschlag: new Blob([r.umschlag], { type: 'application/octet-stream' }),
+      });
+    } catch (err) { console.error(err); zeigeFehler('Das Einrichten ging nicht. Du kannst es noch einmal versuchen.'); return false; }
+    await einstellung.setze(ANMELDE_SPEICHER, { kennung: neu.kennung, name: geraet.name, am: Date.now() });
+    await postausgang();                                                // gleich senden (ohne Netz bleibt sie in der Warteschlange und geht später raus)
+    meldung('Dieses Handy ist eingerichtet.');
+    return true;
+  } finally { anmeldeBusy = false; knopf.disabled = false; await anmeldeKarteZeigen(true); }
+}
+$('#b-anmelde-einrichten').addEventListener('click', () => { anmeldeEinrichten(); });
+
+// „Ja, anmelden“ / „Nein“ auf der Karte „Anmeldung“. Ja geht nur mit Nachweis (Fingerabdruck); nie wird eine Ja-Antwort ohne Nachweis gesendet.
+async function postAnmeldung(f, art) {
+  const k = f.kopf;
+  const nr = k.antworten.indexOf(art === 'ja' ? ANMELDE_JA : 'Nein');
+  if (nr < 0) return { ok: false, satz: 'Das geht gerade nicht.' };
+  if (art !== 'ja') return { ok: await postAntworten(f, { wahl: nr }) };
+  if (!schluesselFuer(config, f.instanz)) { meldung(TEXTE.keinSchluessel[f.instanz], 6000); return { ok: false }; }
+  const kann = kannWebAuthn();
+  const h = kann ? await anmeldeHandyLesen() : null;
+  if (!h) return { ok: false, satz: kann ? 'Dieses Handy ist dafür noch nicht eingerichtet.' : 'Dieses Handy kann das nicht.', einrichten: kann };
+  let nachweis;
+  try { nachweis = await anmeldeBestaetigen(k.anmeldung, [h.kennung]); }
+  catch { return { ok: false, satz: 'Nicht bestätigt. Du kannst es noch einmal versuchen.' }; }
+  return { ok: await postAntworten(f, { wahl: nr, nachweis }) };
 }
 
 // ---------- Übersicht (Funktion „uebersicht“) ----------
@@ -1386,6 +1461,7 @@ window.hofApp = {
   uebersicht: { aktualisieren: uebersichtAktualisieren, fragt: () => ueFragt, status: () => ueStatus, bestellung: () => bestellWahl,
                   gesehenSetzen: ms => { const u = postStand.uebersicht && postStand.uebersicht[normModus(modus)]; if (u) u.gesehen = ms; } },        // (nur für Tests: den Stand „alt“ machen)
   bereich: () => entwurf.bereich,
+  anmeldung: { handy: anmeldeHandyLesen, vergessen: () => einstellung.loesche(ANMELDE_SPEICHER), einrichten: anmeldeEinrichten },
   scan: { code: t => scan.code(t), zustand: () => scan.zustand(), entwurf: () => ({ text: entwurf.text, bereich: entwurf.bereich }) },
   sprache: { cloudAktiv, pauseBis: () => cloudPauseBis, offen: () => erkennungOffen },
   station: { frei: stationFrei, sicht: () => stationSicht(), rolle: () => (geraet ? geraet.rolle : ''), nimmtAuf: () => !!aufnahme },

@@ -226,6 +226,14 @@
       <button type="button" class="knopf" id="b-code-station">Station einladen</button>
       <p class="leise klein einladung-hilfe">Eine Station ist ein Gerät, das nur zeigt und darf, was du am Laptop für es einstellst (Zentrale → Geräte).</p>
     </div>
+    <!-- Anmeldungen bestätigen (A064): dieses Handy einmal einrichten, danach bestätigt es mit Fingerabdruck, wenn sich die Hof-App bei einer Internetseite anmelden soll -->
+    <div class="karte formular" id="anmelde-karte" data-funktion="anmelde_freigabe">
+      <span class="ueberschrift">Anmeldungen bestätigen</span>
+      <p class="leise klein">Wenn die Hof-App sich bei einer Internetseite anmelden soll, fragt sie dich hier. Du bestätigst mit Fingerabdruck.</p>
+      <p class="klein anmelde-stand" id="anmelde-stand" role="status" hidden></p>
+      <div class="anmelde-aktion"><button type="button" class="knopf haupt" id="b-anmelde-einrichten">Dieses Handy einrichten</button></div>
+      <p class="klein anmelde-fehler" id="anmelde-fehler" role="status" hidden></p>
+    </div>
     <span class="ueberschrift">Dürfen senden</span>
     <div class="liste" id="mitglieder"></div>
   </div>

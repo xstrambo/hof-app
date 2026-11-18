@@ -48,11 +48,43 @@ const textMitZeilen = (x, n) => (typeof x === 'string' ? x.replace(/\r/g, '').sp
 const zeitText = x => (typeof x === 'string' && ZEIT.test(x) ? x.slice(0, 19) : '');
 const istObjekt = x => !!x && typeof x === 'object' && !Array.isArray(x);
 
+// Die Anfrage „Darf sich die Hof-App bei <Seite> anmelden?“ (A064): genau diese acht Felder werden am Handy unterschrieben, jedes ist Text in diesen Grenzen
+// (dieselben wie am Laptop, freigabe_kern.FELD_MAX). Alles andere – ein neuntes Feld, ein fehlendes, ein zu langes, Steuerzeichen, Leerraum am Rand – ist keine Anfrage.
+export const ANMELDE_GRENZEN = { id: 80, seite: 60, adresse: 120, wer: 40, grund: 160, erstellt: 25, gueltig_bis: 25, zufall: 64 };
+export const ANMELDE_ANTWORTEN = ['Ja, anmelden', 'Nein'];
+export const ANMELDE_JA = 'Ja, anmelden';
+export function anmeldungKopf(a) {
+  if (!istObjekt(a)) return null;
+  const namen = Object.keys(ANMELDE_GRENZEN);
+  if (Object.keys(a).length !== namen.length) return null;
+  const aus = {};
+  for (const n of namen) {
+    const w = a[n];
+    if (typeof w !== 'string' || !w || w.length > ANMELDE_GRENZEN[n] || /[\u0000-\u001f\u007f]/.test(w) || w !== w.trim()) return null;
+    aus[n] = w;
+  }
+  return aus;
+}
+// Ein Nachweis (Unterschrift vom Handy) hat genau diese vier Texte in diesen Grenzen (wie am Laptop); mehr nimmt der Laptop nicht an.
+export const NACHWEIS_GRENZEN = { kennung: 1400, authenticatorData: 1400, clientDataJSON: 2800, signature: 120 };
+export function nachweisKopf(n) {
+  if (!istObjekt(n) || Object.keys(n).length !== Object.keys(NACHWEIS_GRENZEN).length) return null;
+  const aus = {};
+  for (const [name, max] of Object.entries(NACHWEIS_GRENZEN)) {
+    if (typeof n[name] !== 'string' || !n[name] || n[name].length > max) return null;
+    aus[name] = n[name];
+  }
+  return aus;
+}
+
 // Wie die Zentrale aus der Rückfrage-Datei eine Auswahl zum Antippen macht, hat der Laptop schon erledigt; hier wird nur noch geprüft.
 export function frageKopf(k) {
   if (!istObjekt(k) || k.art !== 'rueckfrage') return null;
   const id = typeof k.id === 'string' ? k.id : '';
   if (!ID_OK.test(id) || typeof k.stand !== 'string' || !k.stand || k.stand.length > 40) return null;
+  // Eine Anmelde-Anfrage: der Block „anmeldung“ muss genau stimmen, und die Knöpfe heißen fest „Ja, anmelden“ und „Nein“ – sonst kommt die Frage nicht aufs Handy.
+  const anmeldung = k.frage_art === 'anmeldung' ? anmeldungKopf(k.anmeldung) : null;
+  if (k.frage_art === 'anmeldung' && (!anmeldung || !Array.isArray(k.antworten) || k.antworten.length !== 2 || k.antworten.some((x, i) => x !== ANMELDE_ANTWORTEN[i]))) return null;
   const antworten = (Array.isArray(k.antworten) ? k.antworten : []).filter(a => typeof a === 'string' && a.trim()).slice(0, MAX_ANTWORTEN).map(a => text(a, 120));
   const punkte = [];
   for (const p of (Array.isArray(k.punkte) ? k.punkte : []).slice(0, MAX_PUNKTE)) {
@@ -71,8 +103,9 @@ export function frageKopf(k) {
   }
   return {
     id, stand: k.stand, text: textMitZeilen(k.text, 2000), werkzeug, werkzeug_titel: text(k.werkzeug_titel, 60) || werkzeug,
-    frage_art: k.frage_art === 'freigabe' ? 'freigabe' : 'frage', antworten, bezug: text(k.bezug, 80), an: text(k.an, 40),
+    frage_art: anmeldung ? 'anmeldung' : k.frage_art === 'freigabe' ? 'freigabe' : 'frage', antworten, bezug: text(k.bezug, 80), an: text(k.an, 40),
     erstellt: text(k.erstellt, 40), gesendet: zeitText(k.gesendet),
+    ...(anmeldung ? { anmeldung } : {}),
     ...(EINGABEN.includes(k.eingabe) ? { eingabe: k.eingabe } : {}),
     ...(punkte.length ? { punkte } : {}),
     ...(nachricht.text || nachricht.positionen ? { nachricht } : {}),
@@ -713,11 +746,20 @@ export async function antwortBauen({ frage, antwort, geraet, config, privatKey, 
   const k = frage.kopf;
   const kopf = { art: 'antwort', id: crypto.randomUUID(), frage: k.id, stand: k.stand, ziel: instanz, von: geraet.name, geraet: geraet.id, erstellt: jetzt.toISOString() };
   let art, wert;
+  if (k.frage_art === 'anmeldung' && !(istObjekt(antwort) && Number.isInteger(antwort.wahl))) throw new Error('Auf eine Anmeldung gibt es nur „Ja, anmelden“ oder „Nein“');
   if (istObjekt(antwort) && Number.isInteger(antwort.wahl)) {
     if (antwort.wahl < 0 || antwort.wahl >= k.antworten.length) throw new Error('Antwort gibt es nicht');
     kopf.wahl = antwort.wahl;
     kopf.wahl_text = k.antworten[antwort.wahl];
     art = 'wahl'; wert = antwort.wahl;
+    if (k.frage_art === 'anmeldung') {
+      // „Ja, anmelden“ gibt es nur mit der Unterschrift des Handys (Nachweis); „Nein“ geht nie mit einem Nachweis hinaus.
+      if (kopf.wahl_text === ANMELDE_JA) {
+        const n = nachweisKopf(antwort.nachweis);
+        if (!n) throw new Error('Ohne Bestätigung am Handy gibt es kein Ja');
+        kopf.nachweis = n;
+      }
+    }
   } else if (istObjekt(antwort) && typeof antwort.text === 'string') {
     const t = antwort.text.trim();
     if (!t || t.length > 1000) throw new Error('Text fehlt oder ist zu lang');
@@ -783,6 +825,20 @@ export async function bestaetigungAntwortBauen({ eintrag, wahl, geraet, config, 
   const mac = await macSchluessel(privatKey, laptop, H2L);
   const klar = await packen(kopf, []);
   return { id: kopf.id, umschlag: await verschluesseln(await beglaubigen(klar, mac), laptop), instanz, meine: { id: kopf.id, wahl, fassung: k.fassung, am: jetzt.getTime() } };
+}
+
+// ---- Dieses Handy für Anmelde-Freigaben einrichten (Funktion „anmelde_freigabe“, A064) ----------------------------------------------
+// Eine kleine beglaubigte Nachricht (Art „anmelde_handy“: Gerätename, Kennung und öffentlicher Schlüssel – nichts Geheimes). Sie geht durch die Warteschlange (klappt auch ohne Netz)
+// und wird gleich gesendet. Der Laptop prüft, dass sie von einem Verwalter-Handy kommt, und merkt sich Kennung und Schlüssel.
+export async function anmeldeHandyBauen({ kennung, schluessel, instanz, geraet, config, privatKey, jetzt = new Date() }) {
+  instanz = normModus(instanz);
+  const laptop = schluesselFuer(config, instanz);
+  if (!laptop) throw new Error('kein Schlüssel');
+  if (typeof kennung !== 'string' || !kennung || kennung.length > 1400 || typeof schluessel !== 'string' || !schluessel || schluessel.length > 400) throw new Error('Kennung oder Schlüssel unbrauchbar');
+  const kopf = { art: 'anmelde_handy', id: crypto.randomUUID(), ziel: instanz, von: geraet.name, geraet: geraet.id, erstellt: jetzt.toISOString(), kennung, schluessel };
+  const mac = await macSchluessel(privatKey, laptop, H2L);
+  const klar = await packen(kopf, []);
+  return { id: kopf.id, umschlag: await verschluesseln(await beglaubigen(klar, mac), laptop), instanz };
 }
 
 // ---- Holen -------------------------------------------------------------------------------------------------------------------
