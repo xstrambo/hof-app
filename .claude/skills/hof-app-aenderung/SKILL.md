@@ -32,7 +32,7 @@ node -e "const fs=require('fs');const s=fs.readFileSync('sw.js','utf8');const l=
 
 ## 3. Tests
 
-- Aufruf im Ordner der App: `node --test test/`
+- Aufruf im Ordner der App: `node --test` (findet alle Dateien unter `test/`; `node --test test/` mit Ordnerangabe scheitert ab Node 22).
 - Rechnende Logik gehört in ein eigenes Modul unter `js/` ohne Zugriff auf `document`/`window`, damit sie so getestet werden kann (Vorbild: `js/gs1.js` mit `test/gs1.test.mjs`).
 - Testdaten sind erfunden (Testhof Pappelweide), nie echte Namen, Nummern oder Schlüssel vom Hof.
 - Im Browser ohne echten Briefkasten ausprobieren: lokal ausliefern und mit `?attrappe` öffnen (wirkt nur auf `localhost`; erster Einladungscode `ADM-1N1`, siehe `js/briefkasten.js`). Für Tests im Browser gibt es `window.hofApp`.
@@ -48,7 +48,7 @@ In `config.js` steht nur Öffentliches (Adressen, öffentliche Schlüssel). Priv
 
 ## Vor dem Commit
 
-1. `node --test test/` läuft durch.
+1. `node --test` läuft durch.
 2. `sw.js`: `VERSION` erhöht, `DATEIEN` stimmt.
 3. Neue Funktion steht in `funktionen.json` auf `"test"`.
 4. Commit-Nachricht: ein deutscher Satz, der sagt, was man am Handy jetzt sieht oder kann; Nummern aus der Änderungsliste in Klammern am Ende, z. B. `Hof-App: Hof-Karte am Handy beschriften (A037)`.
