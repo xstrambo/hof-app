@@ -26,7 +26,7 @@
 .lk-feld:focus,.lk-geb:focus{outline:none}
 .lk-feld:focus-visible,.lk-geb:focus-visible{outline:none;stroke:#fff;stroke-width:3}
 .lk-wahl{stroke:#fff!important;stroke-width:3;fill-opacity:.6}
-.lk-schild{fill:#fff;stroke:#1b1d1c;stroke-width:3px;paint-order:stroke;stroke-linejoin:round;text-anchor:middle;pointer-events:none;font:13px Georgia,"Times New Roman",serif}
+.lk-schild{fill:#fff;stroke:#1b1d1c;stroke-width:3px;paint-order:stroke;stroke-linejoin:round;text-anchor:middle;pointer-events:none;font:13px "Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",Arial,sans-serif}
 .lk-schild-geb{font-size:12px}
 .lk-knoepfe{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;gap:6px}
 .lk-knoepfe button{width:48px;height:48px;border-radius:4px;border:1px solid #4a4f4d;background:#262827;color:#eef1ee;font-size:22px;line-height:1;cursor:pointer}

@@ -1,5 +1,6 @@
 /* Aussehen „Sand und dunkle Tafeln" (A054): Seitengrund Sand, alles Antippbare und alle Kästen dunkel mit heller Schrift.
-   Schrift: Georgia, falls auf dem Gerät vorhanden, sonst die Serifenschrift des Handys – nichts wird aus dem Netz geladen.
+   Schrift (A073, Niklas 19.11.2026: die Schrift mit Füßchen war „ein bisschen unübersichtlich“): die gerade Schrift des Geräts – am Laptop Segoe UI,
+   am Android-Handy Roboto, am iPhone die Systemschrift. Nichts wird aus dem Netz geladen.
    Farben stehen nur hier oben. --text / --leise / --gruen-t / --rot-t / --orange sind die Schriftfarben: auf dem Sand dunkel,
    in jeder dunklen Tafel hell (siehe „Dunkle Tafeln" weiter unten). --rot / --gelb sind Flächen- und Randfarben.
    Grün (Niklas, 17.11.2026: nicht grell, das dunkle Grün des App-Zeichens): --gruen ist das dunkle Grün der Flächen (Mikrofon, Hauptknöpfe), darauf steht weiße Schrift (--auf-gruen).
@@ -16,7 +17,7 @@
 }
 *{box-sizing:border-box}
 html,body{margin:0;height:100%}
-body{background:var(--grund);color:var(--text);font:17px/1.4 Georgia,"Times New Roman",serif;font-variant-numeric:lining-nums;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+body{background:var(--grund);color:var(--text);font:17px/1.4 "Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",Arial,sans-serif;font-variant-numeric:lining-nums;-webkit-tap-highlight-color:transparent;overscroll-behavior:none}
 [hidden]{display:none!important}
 svg{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 button,input,textarea{font:inherit;color:inherit}
@@ -699,15 +700,38 @@ body.station .untere-leiste>*{flex:1 1 0;min-width:0}
 .ding-entwurf{margin:0;padding:10px 12px;border:1px solid var(--linie);border-radius:8px;background:var(--flaeche2);color:var(--hell);font-size:17px;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
 /* A063: Artikel (Reiter der Übersicht) */
 .ar-wahl{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
-.ar-knopf{min-height:44px;padding:0 12px;border-radius:8px;border:1.5px solid var(--rahmen);background:var(--flaeche);color:var(--leise);font-size:15px;font-weight:700}
-.ar-knopf.an{color:var(--text);border-color:var(--gruen-licht);background:var(--flaeche2)}
-.ar-zeile{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:6px 10px;width:100%;min-height:56px;padding:10px 14px;border-top:1px solid var(--linie)}
-.ar-links{min-width:0;display:flex;flex-direction:column;gap:2px;flex:1 1 55%}
-.ar-name{font-weight:700;overflow-wrap:anywhere}
-.ar-unter{font-size:14px;color:var(--leise);overflow-wrap:anywhere}
-.ar-rechts{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px;max-width:45%}
-.ar-preis{font-size:14px;white-space:nowrap}
-.ar-marken{flex:0 0 100%;display:flex;flex-wrap:wrap;gap:4px}
+.ar-knopf{min-height:44px;padding:0 12px;border-radius:8px;border:1.5px solid var(--rahmen);background:var(--flaeche);color:var(--hell-leise);font-size:15px;font-weight:700}
+.ar-knopf.an{color:var(--hell);border-color:var(--gruen-licht);background:var(--flaeche2)}
+/* A069: die Artikel als Tabelle – breit (ab 720 Punkten) acht Spalten, am Handy Artikel · Händler · Endkunde; eine Tabelle, umgeschaltet nur hier */
+.ar-tabelle{width:100%;border-collapse:collapse;table-layout:auto;font-size:15px;line-height:1.35}
+.ar-tabelle th,.ar-tabelle td{padding:8px 10px;text-align:left;vertical-align:top;border-top:1px solid var(--linie)}
+.ar-tabelle thead th{border-top:0;padding:0 4px;background:var(--flaeche2);vertical-align:bottom;white-space:nowrap}
+.ar-tabelle tbody tr:nth-child(even) td{background:var(--flaeche2)}
+.ar-tabelle .ar-zahl{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ar-sort,.ar-kopf-text{display:inline-flex;align-items:center;gap:4px;min-height:44px;padding:0 6px;border:0;background:none;color:var(--text);font:inherit;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;text-align:left}
+.ar-sort{width:100%;cursor:pointer}
+.ar-kopf-text{color:var(--leise)}
+.ar-zahl .ar-sort{justify-content:flex-end}
+.ar-tabelle th[aria-sort] .ar-sort{color:var(--gruen-licht)}
+.ar-pfeil{font-size:11px}
+.ar-kurz{display:none}
+.ar-zeile{min-height:56px}
+.ar-sp-nr{white-space:nowrap;color:var(--leise);font-variant-numeric:tabular-nums}
+.ar-sp-c{font-size:13px;color:var(--leise);font-variant-numeric:tabular-nums}
+.ar-sp-v .ue-marke,.ar-sp-i .ue-marke{margin:0 2px 2px 0}
+.ar-name{display:block;font-weight:700;overflow-wrap:anywhere}
+.ar-unter{display:none;font-size:14px;color:var(--leise);overflow-wrap:anywhere}
+.ar-preis{white-space:nowrap}
+.ar-marken{display:none;flex-wrap:wrap;gap:4px;margin-top:4px}
+@media (max-width:719.98px){
+  .ar-sp-nr,.ar-sp-gruppe,.ar-sp-v,.ar-sp-c,.ar-sp-i{display:none}
+  .ar-lang{display:none}
+  .ar-kurz{display:inline}
+  .ar-unter{display:block}
+  .ar-marken{display:flex}
+  .ar-tabelle th,.ar-tabelle td{padding:8px}
+  .ar-tabelle thead th{padding:0 2px}
+}
 /* A059: Telefonbuch (Reiter der Übersicht) */
 .tb-gruppe{display:flex;flex-direction:column;border-top:1px solid var(--linie)}
 .tb-gruppe:first-child{border-top:0}
