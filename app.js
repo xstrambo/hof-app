@@ -5,13 +5,20 @@ import { packen, verschluesseln, fotoVerkleinern } from './js/paket.js';
 import { Aufnahme, liveTextMoeglich } from './js/sprache.js';
 import { ECHT, TEST, lesModus, schreibModus, normModus, testSchalterErlaubt, schluesselFuer, zielVon, testBlockiert, TEXTE } from './js/modus.js';
 import { ladeFunktionen, sichtbar as funktionSichtbar, anwenden as funktionenAnwenden } from './js/funktionen.js';
-import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon, dateiSchluessel, quittungFuer, uebersichtFuer, uebersichtGrundFuer, uebersichtFrageBauen, karteAuftragBauen, bestaetigungFuer, bestaetigungAntwortBauen, anmeldeHandyBauen, belegOriginalFrageBauen, ANMELDE_JA, stationsProfil, SCAN_HANDGRIFFE } from './js/post.js';
+import { neuerStand, normStand, STAND_NAME, holen as postHolenLogik, antwortBauen, erledigte as postErledigte, schluesselVon, dateiSchluessel, quittungFuer, uebersichtFuer, uebersichtGrundFuer, uebersichtFrageBauen, karteAuftragBauen, bestaetigungFuer, bestaetigungAntwortBauen, fensterFaellig, fensterMerken, quittungFensterFaellig, anmeldeHandyBauen, belegOriginalFrageBauen, belegBetriebAuftragBauen, ANMELDE_JA, stationsProfil, SCAN_HANDGRIFFE } from './js/post.js';
 import { anmeldeBestaetigen, anmeldeHandyEinrichten } from './js/anmelden.js';
-import { zeichneKarte, einblendungText, WAHL_TEXT } from './js/bestaetigung-ansicht.js';
+import { baueMitteilung } from './js/mitteilung-ansicht.js';
+import { zeichneKarte, einblendungText, WAHL_TEXT, fuelleFensterKarte, fuelleFensterQuittung, HINWEIS_LESE, HINWEIS_SPAET, HINWEIS_WARTET } from './js/bestaetigung-ansicht.js';
 import { zeichneReiter, zeichneInhalt, standText } from './js/uebersicht.js';
+import { ARTEN as TAFEL_ARTEN, tafelnBereinigen, eigeneLaden, eigeneSpeichern, eigeneLoeschen, altSatz, zeichneTafeln, zeichneEditor, SATZ_KAPUTT } from './js/tafeln.js';
+import { zeichneAbgeholt, abgeholtText } from './js/abgeholt-ansicht.js';
 import { zeichneBestellung } from './js/bestellung-ansicht.js';
+import { nachrichtGeschicktBauen } from './js/post.js';
+import { kopiereText, teileText } from './js/nachricht-ansicht.js';
 import { istBereich, bereichVon, symbol as bereichSymbol, zeichneKacheln } from './js/kacheln.js';
 import { baueScan } from './js/scan-ansicht.js';
+import { platzFuer as wsPlatzFuer, zeigeHinweis as wsHinweisZeigen } from './js/warteschlange.js';
+import { sprecher as vorlesenSprecher, SCHALTER as VORLESEN_SCHALTER, GELESEN as VORLESEN_GELESEN, GELESEN_MAX, zuLesen, schluesselLesen, gelesenNormen, schalterAn, fragenText } from './js/vorlesen.js';
 import { istScanBereich } from './js/scanzeilen.js';
 import { zeichnePost, sichtbareFragen, sichtbareDinge } from './js/post-ansicht.js';
 import { FUNKTION as CLOUD, MAX_SEKUNDEN, erkennen, hinweisFuer, wiederholbar, pauseMs, textVerbinden, HINWEIS_LEER, HINWEIS_LAEUFT, HINWEIS_FERTIG } from './js/erkennung.js';
@@ -98,7 +105,7 @@ function zeige(id, { verlauf = true } = {}) {
   window.scrollTo(0, 0);
   if (id === 's-start' || id === 's-gesendet') zeichneListen();
   if (id === 's-start') bereichAnzeigen();                    // zeigt auch den Hinweis (er hängt davon ab, ob die Cloud-Erkennung gerade pausiert) und den gewählten Bereich
-  if (id === 's-freigaben') { ladeFreigaben(); anmeldeKarteZeigen(); }
+  if (id === 's-freigaben') { ladeFreigaben(); anmeldeKarteZeigen(); mitteilungAnsicht.zeigen(); }
   if (id === 's-post') { postZeichnen(true); postHolen(); }
   if (id === 's-uebersicht') { uebersichtZeichnen(); uebersichtAuto(vorher === 's-bestellung' ? 'zurueck' : 'oeffnen'); }              // A040: die Übersicht holt beim Öffnen selbst (nicht beim Zurück von der Bestellkarte)
   if (id === 's-bestellung') bestellungZeichnen();
@@ -131,7 +138,7 @@ function netzAnzeigen() {
   });
 }
 addEventListener('online', () => { netzAnzeigen(); postausgang(); });
-addEventListener('offline', netzAnzeigen);
+addEventListener('offline', () => { netzAnzeigen(); zeichneListen(); });
 
 // ---------- Start / Zugang ----------
 async function starten() {
@@ -140,6 +147,7 @@ async function starten() {
   netzAnzeigen();
   geraet = await einstellung.hole('geraet');
   await postLaden();
+  await vorlesenLaden();
   modusSetzen(lesModus(), { merken: false });
   const flaggen = funktionenLaden();
   const gespeichert = await einstellung.hole('entwurf');
@@ -156,6 +164,7 @@ async function starten() {
   zeige('s-start', { verlauf: false });                     // (eine Station kommt von hier zur Übersicht, siehe stationZiel)
   hintergrund();
   if (ANZEIGE) return;
+  if (q.get('post') === '1') { const u = new URL(location.href); u.searchParams.delete('post'); history.replaceState({ s: 's-start' }, '', u.search || location.pathname); await flaggen.catch(() => {}); mitteilungGeklickt(); return; }      // aus einer angetippten Mitteilung (sw.js): gleich zur Post, wo die Karte „Anmeldung“ steht
   // Angefangener Entwurf? Dann gleich dort weitermachen.
   if (entwurf.text.trim() || entwurf.audio || entwurf.anhaenge.length) { zeigePruefen(false); if (aktuell === 's-pruefen') meldung('Dein angefangener Entwurf ist noch da.'); }
 }
@@ -499,7 +508,8 @@ $('#b-senden').addEventListener('click', async () => {
     const bereich = kachelnAktiv() && istBereich(entwurf.bereich) ? { bereich: entwurf.bereich } : {};            // die gewählte Kachel (Funktion „kacheln“)
     const klar = await packen({ id, von: geraet.name, geraet: geraet.id, erstellt: new Date(erstellt).toISOString(), text: entwurf.text, sprachDauer: entwurf.audioDauer || 0, ziel, ...bereich }, dateien);
     const umschlag = await verschluesseln(klar, schluessel);
-    const fotos = dateien.filter(d => d.art === 'foto').length;
+    if (!(await wsPlatz(umschlag.byteLength ?? umschlag.length))) return;      // A032: die Warteschlange hat Grenzen – voll heißt: die neue Nachricht wird nicht angenommen (Hinweis, der Entwurf bleibt), nichts Altes wird verworfen
+    const fotos =dateien.filter(d => d.art === 'foto').length;
     const doks = dateien.filter(d => d.art === 'dokument').length;
     await nachrichten.speichere({
       id, erstellt, status: 'wartet', ziel,
@@ -535,6 +545,13 @@ $('#b-senden').addEventListener('click', async () => {
 });
 $('#b-neu').addEventListener('click', () => { history.replaceState({ s: 's-start' }, ''); zeige('s-start', { verlauf: false }); });
 
+// A032: Platz in der Warteschlange? (Grenzen: js/warteschlange.js) Sonst sagt ein Hinweis es; die Nachricht wird dann nicht angenommen.
+async function wsPlatz(bytes) {
+  if (!funktionAktiv('offline')) return true;
+  const platz = wsPlatzFuer(await nachrichten.alle(), bytes ?? 0);
+  if (!platz.ok) meldung(platz.text, 9000);
+  return platz.ok;
+}
 let sendetGerade = false;
 let testHinweisGezeigt = false;
 async function postausgang() {
@@ -594,6 +611,13 @@ function hintergrund() {
   document.addEventListener('visibilitychange', runde);
   // Station (A055): Ihre Übersicht ist immer offen. Wird das Gerät wieder aufgeweckt, fragt sie wie beim Öffnen von selbst – aber nur, wenn ihr Stand älter als 5 Minuten ist.
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && stationFrei() && aktuell === 's-uebersicht') uebersichtAuto('reiter'); });
+  // Auffrischen von selbst (A055 Stufe 2): Hat die Station einen Takt, fragt sie nach so vielen Minuten wieder – solange ihre Übersicht offen ist und das Gerät wach.
+  setInterval(() => {
+    const eigenTakt = !stationFrei() && geraet?.rolle === 'admin' && funktionAktiv('ansichten') && !ANZEIGE ? eigeneLaden().takt : 0;        // ein Verwalter-Handy mit eigener Ansicht: der Takt aus dieser Ansicht
+    const takt = stationFrei() ? stationSicht().takt || 0 : eigenTakt;
+    if (takt && aktuell === 's-uebersicht' && !ueEditor && document.visibilityState === 'visible' && standAlter() >= takt * 60000 - 5000) uebersichtAuto('takt');
+    else if (aktuell === 's-uebersicht' && !ueEditor && (takt || (stationFrei() && stationSicht().tafeln))) uebersichtZeichnen();         // der Hinweis „Stand ist alt“ soll auch ohne Anfrage erscheinen
+  }, 30000);
 }
 
 // ---------- Listen ----------
@@ -604,8 +628,10 @@ const VERLAUF_MAX = 3;
 let listenLauf = 0;
 async function zeichneListen() {
   const mein = ++listenLauf;
-  const alle = (await nachrichten.alle()).filter(n => n.art !== 'antwort');     // Antworten auf Rückfragen stehen in der Post, nicht hier
+  const roh = await nachrichten.alle();
+  const alle = roh.filter(n => n.art !== 'antwort');                             // Antworten auf Rückfragen stehen in der Post, nicht hier
   if (mein !== listenLauf) return;                                               // unterdessen wurde neu gezeichnet (z. B. den Schalter umgelegt)
+  wsHinweisZeigen($('#ws-hinweis'), roh);                                        // A032: „wartet auf Netz (2)“ (zählt auch wartende Antworten); sichtbar nur mit der Funktion „offline“
   const heute = new Date(); heute.setHours(0, 0, 0, 0);
   const jetzt = modus;                                                           // erst nach dem Warten lesen: der Schalter kann unterdessen umgelegt worden sein
   verlaufZeigen($('#liste-start'), $('#hinweis-start'), alle, jetzt);
@@ -626,7 +652,7 @@ const andereText = (n, jetzt) => jetzt === TEST
 function fuelle(box, liste) {
   box.replaceChildren();
   if (!liste.length) { const l = document.createElement('div'); l.className = 'leer'; l.textContent = 'Noch nichts gesendet.'; box.appendChild(l); return; }
-  for (const n of liste) {
+  for (const [nr, n] of liste.entries()) {
     const ziel = zielVon(n);
     const e = document.createElement('div'); e.className = 'eintrag' + (ziel === TEST ? ' test' : ''); e.dataset.id = n.id; e.dataset.status = n.status; e.dataset.ziel = ziel;
     const t = document.createElement('span'); t.className = 'eintrag-text'; t.textContent = n.vorschau; e.appendChild(t);
@@ -634,14 +660,17 @@ function fuelle(box, liste) {
     if (n.sprache) e.appendChild(mini('sprache', '', 'Sprachnachricht ' + dauerText(n.sprache)));
     if (n.fotos) e.appendChild(mini('foto', n.fotos > 1 ? String(n.fotos) : '', n.fotos === 1 ? '1 Foto' : n.fotos + ' Fotos'));
     if (n.doks) e.appendChild(mini('dok', n.doks > 1 ? String(n.doks) : '', n.doks === 1 ? '1 Dokument' : n.doks + ' Dokumente'));
+    const q = quittungZeile(n, ziel);
+    const lese = leseZeile(n, ziel, !!q && q.textContent !== ERSTE_QUITTUNG, nr === 0);
+    const leseKurz = lese && lese.classList.contains('eintrag-lese') && !lese.classList.contains('eintrag-lese-spaet');   // „Ich lese …“ steht anstelle der Uhrzeit (kein Platz für eine eigene Zeile)
     const z = document.createElement('span'); z.className = 'zeit';
     const st = document.createElement('span'); st.className = 'st st-' + n.status; st.setAttribute('role', 'img');
     st.setAttribute('aria-label', { wartet: 'Wartet auf Netz', gesendet: 'Gesendet', abgeholt: 'Im BetriebsBrain angekommen' }[n.status]);
     if (n.status === 'wartet') { z.classList.add('wartet'); z.append('wartet auf Netz', st); }
-    else z.append(zeitText(n.erstellt), st);
+    else z.append(leseKurz ? lese : zeitText(n.erstellt), st);
     e.appendChild(z);
-    const q = quittungZeile(n, ziel);
     if (q) { e.classList.add('mit-quittung'); e.appendChild(q); }
+    if (lese && !leseKurz) { e.classList.add('mit-hinweiszeile'); e.appendChild(lese); }                // dieselbe Zeile unter der Nachricht wie die Quittung (umbrechen, auf kleinen Handys eine Zeile)
     const karte = karteZeile(n, ziel);
     if (karte) { e.classList.add('mit-karte'); e.appendChild(karte); }
     box.appendChild(e);
@@ -657,6 +686,65 @@ function quittungZeile(n, ziel) {
   const q = document.createElement('span'); q.className = 'eintrag-quittung'; q.dataset.funktion = 'quittung'; q.textContent = satz;
   return q;
 }
+// A051 (Funktion „verstanden“): unter der gesendeten Nachricht „Ich lese …“, solange weder Karte noch Quittung da sind; nach 90 Sekunden ohne alles „Angekommen, wird gelesen, sobald der
+// Laptop läuft“. Mit einer offenen Karte, die auf „Stimmt“ wartet (vor_buchen): „wartet auf dein Stimmt“. Feste Sätze, nie Text vom Laptop.
+const LESE_WARTE_MS = 90 * 1000, LESE_MAX_MS = 6 * 3600 * 1000;
+const ERSTE_QUITTUNG = 'Angekommen';                  // der Haken, den Abholen sofort setzt: kein Fenster, und „Ich lese …“ bleibt, bis etwas Richtiges kommt
+const QUITTUNG_WARTE_MS = 8000;                      // eine Quittung wartet kurz, ob die Karte gleich nachkommt (beides kommt meist im selben Lauf): dann gilt die Karte
+let leseTimer;
+function leseZeile(n, ziel, mitQuittung, neueste) {
+  if (!postAktiv() || !funktionAktiv('verstanden') || !funktionAktiv('bestaetigung') || n.status === 'wartet') return null;
+  const b = bestaetigungFuer(postStand, ziel, n.id);
+  const mach = (klasse, text) => { const x = document.createElement('span'); x.className = klasse; x.dataset.funktion = 'verstanden'; x.textContent = text; return x; };
+  if (b) return b.kopf.vor_buchen === true && b.kopf.stand === 'offen' && !b.meine ? mach('eintrag-wartet', HINWEIS_WARTET) : null;
+  if (mitQuittung || !neueste) return null;                       // „Ich lese …“ nur an der neuesten Nachricht (der Verlauf hat wenig Platz)
+  const seit = Date.now() - (n.gesendet || n.erstellt);
+  if (seit > LESE_MAX_MS) return null;
+  if (seit < LESE_WARTE_MS) {
+    clearTimeout(leseTimer); leseTimer = setTimeout(zeichneListen, LESE_WARTE_MS - seit + 50);
+    return mach('eintrag-lese', HINWEIS_LESE);
+  }
+  return mach('eintrag-lese eintrag-lese-spaet', HINWEIS_SPAET);
+}
+// A051: das Fenster „Das habe ich verstanden“. Geht von selbst auf, wenn zu einer Nachricht dieses Handys (im gerade gewählten Modus) eine offene Karte da ist – jede Fassung
+// höchstens einmal, eine Erinnerung noch einmal. Gibt es nur eine Quittung, zeigt es ihren Satz mit „OK“. Kommt beides, gilt die Karte. Eins nach dem anderen.
+let fensterOffen = false, fensterTimer;
+const fensterHuelle = () => $('#fenster');
+function fensterZu() { fensterOffen = false; fensterHuelle().hidden = true; fensterHuelle().querySelector('.fenster').replaceChildren(); setTimeout(fensterPruefen, 0); }
+async function fensterPruefen() {
+  if (fensterOffen || !postAktiv() || !funktionAktiv('verstanden') || !funktionAktiv('bestaetigung') || !postStand) return false;
+  const meine = new Map();
+  try { for (const n of await nachrichten.alle()) if (n.art !== 'antwort' && n.status !== 'wartet' && zielVon(n) === modus) meine.set(n.id, n); } catch { return false; }
+  if (fensterOffen) return false;
+  const huelle = fensterHuelle();
+  for (const b of Object.values(postStand.bestaetigungen || {})) {
+    if (b.instanz !== modus || !meine.has(b.bezug) || !fensterFaellig(b)) continue;
+    fensterMerken(b);
+    await postSpeichern(postStand);
+    fensterOffen = true;
+    fuelleFensterKarte(huelle, b, karteAntworten, fensterZu);
+    huelle.hidden = false;
+    huelle.querySelector('.fenster-stimmt').focus();
+    return true;
+  }
+  let spaeter = 0;
+  for (const q of Object.values(postStand.quittungen || {})) {
+    if (q.instanz !== modus || !meine.has(q.bezug) || q.kopf.text === ERSTE_QUITTUNG || !quittungFensterFaellig(q) || bestaetigungFuer(postStand, q.instanz, q.bezug)) continue;
+    const warte = QUITTUNG_WARTE_MS - (Date.now() - q.gesehen);
+    if (warte > 0) { spaeter = Math.max(spaeter, warte); continue; }
+    q.fenster = q.kopf.fassung;
+    await postSpeichern(postStand);
+    fensterOffen = true;
+    fuelleFensterQuittung(huelle, q, fensterZu);
+    huelle.hidden = false;
+    huelle.querySelector('.fenster-ok').focus();
+    return true;
+  }
+  if (spaeter) { clearTimeout(fensterTimer); fensterTimer = setTimeout(fensterPruefen, spaeter + 50); }
+  return false;
+}
+$('#b-fenster-zu').addEventListener('click', () => fensterZu());
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && fensterOffen) fensterZu(); });
 // Unter der Quittung: die Karte „Bestätigen?“ (Funktion „bestaetigung“) – was der Laptop verstanden hat, mit „Stimmt“ und „Falsch“. Nur auf Verwalter-Handys, nur für diese Nachricht und dieses Ziel.
 function karteZeile(n, ziel) {
   if (!postAktiv() || !funktionAktiv('rueckfragen') || !funktionAktiv('bestaetigung')) return null;
@@ -673,6 +761,7 @@ async function karteAntworten(eintrag, wahl) {
   if (!privatKey) { meldung('Dieses Handy kann gerade nicht antworten (Schlüssel fehlt). Bitte Claude Bescheid geben.', 6000); return false; }
   try {
     const r = await bestaetigungAntwortBauen({ eintrag: aktuell, wahl, geraet, config, privatKey });
+    if (!(await wsPlatz(r.umschlag.byteLength ?? r.umschlag.length))) return false;      // A032: die Grenzen der Warteschlange gelten auch für „Stimmt“ / „Falsch“ auf Karten
     await nachrichten.speichere({
       id: r.id, erstellt: Date.now(), status: 'wartet', ziel: r.instanz, art: 'antwort', frage: key,
       vorschau: 'Antwort: ' + WAHL_TEXT[wahl], sprache: 0, fotos: 0, doks: 0,
@@ -691,7 +780,7 @@ async function karteAntworten(eintrag, wahl) {
   }
 }
 // Neue Karten, die noch nicht angekündigt wurden: kurz oben eingeblendet (antippen: zur Karte)
-async function karteAnkuendigen() {
+async function karteAnkuendigen(fensterAuf = false) {
   if (!postAktiv() || !funktionAktiv('bestaetigung')) return;
   let neu = null;
   for (const b of Object.values(postStand.bestaetigungen || {})) {
@@ -699,7 +788,7 @@ async function karteAnkuendigen() {
     else if (b.neu) b.neu = false;
   }
   await postSpeichern(postStand);
-  if (neu) einblendung(einblendungText(neu), 6000);
+  if (neu && !fensterAuf) einblendung(einblendungText(neu), 6000);
 }
 let einblendungTimer;
 function einblendung(text, ms) {
@@ -899,7 +988,7 @@ async function postHolen() {
     }
     postFehler = ''; postZuletzt = Date.now();
     if (r.quittungen || r.bestaetigungen) zeichneListen();     // neue Quittungen und Karten stehen unter den gesendeten Nachrichten
-    if (r.bestaetigungen) karteAnkuendigen();
+    if (r.quittungen || r.bestaetigungen) { const auf = await fensterPruefen(); if (r.bestaetigungen) karteAnkuendigen(auf); }
     if (r.uebersicht) { if (!ueFragt) ueStatus = ''; if (aktuell === 's-uebersicht') uebersichtZeichnen(); }
   } catch (err) {
     const code = err instanceof BriefkastenFehler ? err.code : '';
@@ -925,6 +1014,7 @@ function postAnzeigen() {
   $('#b-uebersicht').hidden = !verwalter;                                // Übersicht neben dem Mikrofon: nur ohne Leiste (mit Leiste blendet styles.css sie aus; ohne Funktion „uebersicht“ ebenso)
   navAnzeigen();                                                         // Leiste: Eintrag „Post“ und die Zahl der offenen Fragen
   if (aktuell === 's-post') postZeichnen();
+  autoVorlesen();                                                        // A031: neue Rückfragen vorlesen (nur mit dem Schalter, Standard aus)
 }
 
 async function postZeichnen(erzwingen = false) {
@@ -932,14 +1022,14 @@ async function postZeichnen(erzwingen = false) {
   try { for (const n of await nachrichten.alle()) if (n.art === 'antwort') status.set(n.id, n.status); } catch { /* ohne Status */ }
   const zeigen = sichtbareFragen(postStand, modus, aenderungenAktiv());
   const ctx = {
-    stand: postStand, modus, aenderungenAktiv: aenderungenAktiv(), dingeAktiv: dingeAktiv(), entwuerfe: postEntwuerfe, status, beiAntwort: postAntworten, beiDing: postDing, beiAnmeldung: postAnmeldung, beiEinrichten: () => zeige('s-freigaben'), jetzt: () => Date.now(),
+    stand: postStand, modus, aenderungenAktiv: aenderungenAktiv(), dingeAktiv: dingeAktiv(), entwuerfe: postEntwuerfe, status, beiAntwort: postAntworten, beiDing: postDing, beiAnmeldung: postAnmeldung, beiEinrichten: () => zeige('s-freigaben'), jetzt: () => Date.now(), vorlesen: vorlesenSchnittstelle(),
     zeit: iso => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : zeitText(d.getTime()); },
     hinweis: postFehler === 'nicht_bereit' ? (modus === TEST ? 'Der Test-Briefkasten kann das noch nicht. Bitte Claude Bescheid geben.' : 'Der Briefkasten kann das noch nicht.')
       : postFehler === 'netz' ? 'Kein Netz – die Liste ist vom letzten Mal.' : postFehler === 'fehler' ? 'Das Aktualisieren hat nicht geklappt. Gleich noch ein Versuch.' : '',
     echtOffen: modus === TEST ? sichtbareFragen(postStand, ECHT, aenderungenAktiv()).length : 0,
     zuletzt: postZuletzt ? 'Zuletzt aktualisiert: ' + zeitText(postZuletzt) : '',
   };
-  const signatur = JSON.stringify([modus, ctx.aenderungenAktiv, ctx.dingeAktiv, ctx.hinweis, ctx.echtOffen, [...status],
+  const signatur = JSON.stringify([modus, ctx.aenderungenAktiv, ctx.dingeAktiv, ctx.hinweis, ctx.echtOffen, [...status], !!ctx.vorlesen, !!(ctx.vorlesen && ctx.vorlesen.hoerenMoeglich),
     zeigen.map(f => [f.instanz, f.id, f.kopf.stand, f.meine && f.meine.id]),
     sichtbareDinge(postStand, modus, ctx.dingeAktiv).map(d => [d.instanz, d.id, d.kopf]),                      // der ganze Kopf: zwei Fassungen in derselben Sekunde unterscheiden sich nur im Inhalt
     postErledigte(postStand, modus).map(f => [f.instanz, f.id, f.zustand, f.erledigt.antwort, f.erledigt.gesehen, f.meine && f.meine.id])]);
@@ -949,8 +1039,47 @@ async function postZeichnen(erzwingen = false) {
 }
 
 // „Für dich“: das PDF öffnen oder den Eintrag mit „Erledigt“ wegräumen (auch das PDF auf dem Handy). Auf dem Laptop bleibt alles, wie es ist.
+// „Geschickt“ zur Karte „Nachricht an Kunden“ (A025): eine kleine beglaubigte Meldung in die Warteschlange (geht auch ohne Netz raus). Der Text selbst geht nie über diesen Weg.
+async function nachrichtGeschickt(d, key) {
+  const aktuell = postStand.dinge[key];
+  const n = aktuell && aktuell.kopf && aktuell.kopf.nachricht;
+  if (!funktionAktiv('kundennachricht') || !n || n.geschickt || (aktuell.meine && aktuell.meine.fassung === n.fassung)) { postZeichnen(true); return; }
+  if (!schluesselFuer(config, aktuell.instanz)) { meldung(TEXTE.keinSchluessel[aktuell.instanz], 6000); return; }
+  const privatKey = await privaterSchluessel();
+  if (!privatKey) { meldung('Dieses Handy kann gerade nicht melden (Schlüssel fehlt). Bitte Claude Bescheid geben.', 6000); return; }
+  try {
+    const r = await nachrichtGeschicktBauen({ eintrag: aktuell, geraet, config, privatKey });
+    await nachrichten.speichere({
+      id: r.id, erstellt: Date.now(), status: 'wartet', ziel: r.instanz, art: 'antwort', frage: key,
+      vorschau: 'Nachricht an Kunden: geschickt', sprache: 0, fotos: 0, doks: 0,
+      umschlag: new Blob([r.umschlag], { type: 'application/octet-stream' }),
+    });
+    const jetzt = postStand.dinge[key];                          // unterdessen kann eine neue Fassung gekommen sein: dann gilt die Meldung nicht dafür
+    if (jetzt && jetzt.kopf.nachricht && jetzt.kopf.nachricht.fassung === n.fassung) jetzt.meine = r.meine;
+    await postSpeichern(postStand);
+    postZeichnen(true);
+    await postausgang();
+  } catch (err) {
+    console.error(err);
+    meldung('Das Melden ging nicht. Bitte nochmal versuchen.', 5000);
+  }
+}
+
 async function postDing(aktion, d) {
   const key = schluesselVon(d.instanz, d.id);
+  if (aktion === 'kopieren' || aktion === 'teilen') {                     // A025: der Entwurf an den Kunden – kopieren oder teilen, Niklas schickt selbst
+    const t = d.kopf.text || '';
+    if (aktion === 'teilen') {
+      const r = await teileText(t);
+      if (r !== 'nicht_moeglich') return;
+      const ok = await kopiereText(t);
+      meldung(ok ? 'Teilen geht hier nicht – der Text ist kopiert. Bitte selbst einfügen.' : 'Teilen und Kopieren gehen hier nicht.', 5000);
+      return;
+    }
+    meldung((await kopiereText(t)) ? 'Text kopiert.' : 'Kopieren ging nicht.', 3000);
+    return;
+  }
+  if (aktion === 'geschickt') { await nachrichtGeschickt(d, key); return; }
   if (aktion === 'oeffnen') {
     let bytes = null;
     try { bytes = await einstellung.hole(dateiSchluessel(key)); } catch { bytes = null; }
@@ -981,6 +1110,7 @@ async function postAntworten(f, antwort) {
   if (!privatKey) { meldung('Dieses Handy kann gerade nicht antworten (Schlüssel fehlt). Bitte Claude Bescheid geben.', 6000); return false; }
   try {
     const r = await antwortBauen({ frage: f, antwort, geraet, config, privatKey });
+    if (!(await wsPlatz(r.umschlag.byteLength ?? r.umschlag.length))) return false;      // A032: die Grenzen der Warteschlange gelten auch für Antworten
     await nachrichten.speichere({
       id: r.id, erstellt: Date.now(), status: 'wartet', ziel: r.instanz, art: 'antwort', frage: key,
       vorschau: 'Antwort: ' + r.meine.text, sprache: 0, fotos: 0, doks: 0,
@@ -999,6 +1129,86 @@ async function postAntworten(f, antwort) {
     meldung('Die Antwort ging nicht. Bitte nochmal versuchen.', 5000);
     return false;
   }
+}
+
+// ---------- Rückfragen vorlesen und per Sprache antworten (Funktion „vorlesen“, A031) ----------
+// Vorlesen: Gerätestimme (Web Speech API), nichts geht ins Netz. Der Schalter „Rückfragen automatisch vorlesen“ (Standard aus) liest NEUE Rückfragen einmal vor; schaltet man ihn ein,
+// wird nicht nachträglich alles Offene vorgelesen. Antwort per Sprache: Aufnahme wie beim Sprechen, Abgleich mit den Antwortmöglichkeiten (js/vorlesen.js) – nur bei einem eindeutigen
+// Treffer und einem klaren „Ja“ auf „… – stimmt?“ geht die Antwort raus, nie geraten.
+const vo = { stimme: vorlesenSprecher(), hoere: () => antwortHoeren(), hoert: false, auto: false, gelesen: new Set(), laeuft: false, hoerenFest: null };
+async function vorlesenLaden() {
+  try {
+    vo.auto = schalterAn(await einstellung.hole(VORLESEN_SCHALTER));
+    vo.gelesen = new Set(gelesenNormen(await einstellung.hole(VORLESEN_GELESEN)));
+  } catch { vo.auto = false; }
+  vorlesenSchalterZeigen();
+}
+function vorlesenSchalterZeigen() {
+  const z = $('#vorlesen-zeile'), k = $('#vorlesen-auto');
+  if (!z || !k) return;
+  z.hidden = !vo.stimme.moeglich;
+  k.checked = vo.auto;
+}
+function vorlesenSchnittstelle() {
+  if (!funktionAktiv('vorlesen') || !vo.stimme.moeglich) return null;
+  const hoerenMoeglich = vo.hoerenFest !== null ? vo.hoerenFest : (liveTextMoeglich || (!!navigator.mediaDevices && !!window.MediaRecorder));
+  return { sprich: t => vo.stimme.sprich(t), stopp: () => vo.stimme.stopp(), hoere: () => vo.hoere(), hoerenMoeglich };
+}
+$('#vorlesen-auto').addEventListener('change', async e => {
+  vo.auto = !!e.target.checked;
+  if (vo.auto) {                                                                      // nur was NEU kommt, wird vorgelesen – nicht alles, was schon offen ist
+    for (const m of [ECHT, TEST]) for (const f of sichtbareFragen(postStand, m, aenderungenAktiv())) vo.gelesen.add(schluesselLesen(f));
+  } else vo.stimme.stopp();
+  try {
+    await einstellung.setze(VORLESEN_SCHALTER, vo.auto);
+    await einstellung.setze(VORLESEN_GELESEN, [...vo.gelesen].slice(-GELESEN_MAX));
+  } catch { /* beim nächsten Mal */ }
+});
+async function autoVorlesen() {
+  if (vo.laeuft || !vo.auto || !vo.stimme.moeglich || !postAktiv() || !funktionAktiv('vorlesen')) return;
+  if (document.visibilityState !== 'visible' || aufnahme || vo.hoert) return;           // nicht, wenn die App im Hintergrund ist oder gerade aufnimmt
+  vo.laeuft = true;
+  try {
+    for (const f of zuLesen(sichtbareFragen(postStand, modus, aenderungenAktiv()), vo.gelesen)) {
+      if (!vo.auto) break;
+      vo.gelesen.add(schluesselLesen(f));                                               // jede Rückfrage (Fassung) nur einmal
+      try { await einstellung.setze(VORLESEN_GELESEN, [...vo.gelesen].slice(-GELESEN_MAX)); } catch { /* egal */ }
+      await vo.stimme.sprich(fragenText(f));
+    }
+  } finally { vo.laeuft = false; }
+}
+// Eine kurze gesprochene Antwort hören: wie beim Sprechen (Live-Text des Handys, sonst Aufnahme und Cloud-Erkennung). Ende: 1,5 Sekunden Pause nach dem letzten Text, spätestens nach 8 Sekunden
+// (Cloud: 5 Sekunden Aufnahme). Gibt den Text zurück, bei Problemen leer.
+async function antwortHoeren() {
+  if (aufnahme || vo.hoert) return '';
+  vo.hoert = true;
+  let a = null, text = '';
+  try {
+    vo.stimme.stopp();                                                                  // nicht gegen die eigene Stimme aufnehmen
+    const cloud = cloudAktiv();
+    let zuletzt = Date.now(), gehoert = '';
+    a = new Aufnahme({
+      liveText: !cloud && config.live_text === 'handy', aufnahmeGrund: cloud ? 'cloud' : 'aus',
+      beiText: (fest, vor) => { const t = [fest, vor].filter(Boolean).join(' ').trim(); if (t !== gehoert) { gehoert = t; zuletzt = Date.now(); } },
+      beiProblem: () => { a.problem = true; },
+    });
+    await a.starten();
+    const t0 = Date.now();
+    await new Promise(ok => {
+      const iv = setInterval(() => {
+        const jetzt = Date.now();
+        if (a.problem || (gehoert && jetzt - zuletzt > 1500) || jetzt - t0 > (cloud ? 5000 : 8000)) { clearInterval(iv); ok(); }
+      }, 200);
+    });
+    const r = await a.beenden();
+    text = (r.text || gehoert || '').trim();
+    if (!text && r.audio && cloud) {
+      const e = await erkennen({ kasten, token: geraet.token, audio: r.audio, dauer: r.audioDauer || r.dauer });
+      if (e.ok && e.text) text = String(e.text).trim();
+    }
+  } catch { try { if (a) a.abbrechen(); } catch { /* egal */ } text = ''; }
+  finally { vo.hoert = false; }
+  return text;
 }
 
 // ---------- Anmeldungen bestätigen (Funktion „anmelde_freigabe“, A064) ----------
@@ -1059,6 +1269,11 @@ async function anmeldeEinrichten() {
 }
 $('#b-anmelde-einrichten').addEventListener('click', () => { anmeldeEinrichten(); });
 
+// Mitteilung aufs Handy bei einer Anmelde-Frage (Funktion „anmelde_mitteilung“, A064 Stufe 2): Knopf unter „Anmeldungen bestätigen“; Antippen der Mitteilung öffnet die Post.
+const mitteilungAnsicht = baueMitteilung({ $, geraet: () => geraet, modus: () => modus, config, stand: () => postStand, privaterSchluessel, nachrichten, postausgang, meldung, holen: () => postHolen() });
+function mitteilungGeklickt() { if (geraet && geraet.status === 'frei' && geraet.rolle === 'admin' && !ANZEIGE) zeige('s-post'); }
+if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => { if (e.data && e.data.art === 'mitteilung-geklickt') mitteilungGeklickt(); });
+
 // „Ja, anmelden“ / „Nein“ auf der Karte „Anmeldung“. Ja geht nur mit Nachweis (Fingerabdruck); nie wird eine Ja-Antwort ohne Nachweis gesendet.
 async function postAnmeldung(f, art) {
   const k = f.kopf;
@@ -1100,7 +1315,70 @@ function uebersichtAuto(wann) {
   uebersichtAktualisieren();
 }
 function bestellungOeffnen(d) { bestellWahl = d; zeige('s-bestellung'); }
-function bestellungZeichnen() { zeichneBestellung($('#bestellung-inhalt'), bestellWahl); }
+function bestellungZeichnen() {
+  zeichneBestellung($('#bestellung-inhalt'), bestellWahl);
+  zeichneAbgeholt($('#bestellung-inhalt'), bestellWahl, { darf: stationFrei() && stationDarf('abgeholt') && funktionAktiv('ansichten'), senden: abgeholtSenden });      // Station, Stufe 3: Knopf „Bestellung abgeholt“
+}
+// Station (A055 Stufe 3): eine Zeile „Abgeholt: VB-…“ an den Laptop, wie jede Nachricht (verschlüsselt, mit Warteschlange). Dort bucht das Werkzeug Bestellungen.
+async function abgeholtSenden(nr) {
+  if (!stationFrei() || !stationDarf('abgeholt')) return false;
+  const ziel = modus;
+  const schluessel = schluesselFuer(config, ziel);
+  if (!schluessel) { meldung(TEXTE.keinSchluessel[ziel], 6000); return false; }
+  const id = crypto.randomUUID();
+  const erstellt = Date.now();
+  const klar = await packen({ id, von: geraet.name, geraet: geraet.id, erstellt: new Date(erstellt).toISOString(), text: abgeholtText(nr), sprachDauer: 0, ziel }, []);
+  const umschlag = await verschluesseln(klar, schluessel);
+  await nachrichten.speichere({ id, erstellt, status: 'wartet', ziel, vorschau: abgeholtText(nr), sprache: 0, fotos: 0, doks: 0, umschlag: new Blob([umschlag], { type: 'application/octet-stream' }) });
+  await postausgang();
+  const n = await nachrichten.hole(id);
+  meldung(n?.status === 'wartet' ? 'Gespeichert. Kein Netz – geht automatisch raus, sobald Empfang da ist.' : 'Gemeldet.', 5000);
+  return true;
+}
+// Tafeln (A055 Stufe 2): statt der Reiter alle gewählten Tafeln gleichzeitig. Eine Station bekommt die Liste vom Laptop (Profil), ein Verwalter-Handy richtet sie am Gerät
+// selbst ein (js/tafeln.js). Gibt true zurück, wenn hier gezeichnet wurde (Tafeln oder Editor) – sonst zeichnet uebersichtZeichnen die Reiter wie bisher.
+let ueEditor = false;
+let ansichtKaputtGesagt = false;
+function ansichtenZeichnen() {
+  const station = stationFrei();
+  const verwalter = !ANZEIGE && !station && geraet?.rolle === 'admin' && funktionAktiv('ansichten');
+  $('#b-ue-ansicht').hidden = !verwalter;
+  $('#ue-stand').classList.remove('ue-alt');
+  if (ANZEIGE || !funktionAktiv('ansichten')) return false;
+  const sicht = station ? stationSicht() : null;
+  const kopf = sicht && sicht.satz ? null : uebersichtFuer(postStand, modus);
+  const mitHof = funktionAktiv('hof') && !!(kopf && kopf.hof && kopf.hof.karte === 'ok');
+  const eigen = verwalter ? eigeneLaden() : { tafeln: [], takt: 0, kaputt: false };
+  if (eigen.kaputt && !ansichtKaputtGesagt) { ansichtKaputtGesagt = true; meldung(SATZ_KAPUTT, 7000); }
+  const leiste = $('#ue-reiter');
+  if (ueEditor && verwalter) {
+    leiste.hidden = true; $('#ue-such').hidden = true; stationKnoepfe(null);
+    const fertig = () => { ueEditor = false; uebersichtZeichnen(); };
+    zeichneEditor($('#ue-seite'), eigen, TAFEL_ARTEN.filter(a => a !== 'hof' || mitHof), {
+      fertig: (tafeln, takt) => { if (tafeln.length) eigeneSpeichern(tafeln, takt); else eigeneLoeschen(); meldung('Gespeichert.'); fertig(); },
+      zuruecksetzen: () => { eigeneLoeschen(); meldung('Es gelten wieder die Reiter.'); fertig(); },
+      abbrechen: fertig,
+    }, eigen.kaputt ? SATZ_KAPUTT : '');
+    $('#ue-stand').textContent = '';
+    return true;
+  }
+  const quelle = station ? (sicht && !sicht.satz && sicht.tafeln ? sicht : null) : eigen.tafeln.length ? eigen : null;
+  if (!quelle) return false;
+  const tafeln = tafelnBereinigen(quelle.tafeln.filter(t => t.art !== 'hof' || mitHof));
+  const takt = quelle.takt || 0;
+  leiste.hidden = true;
+  $('#ue-such').hidden = true;
+  stationKnoepfe(sicht);
+  zeichneTafeln($('#ue-seite'), kopf, tafeln, { hofWahl: ueHofWahl, beiHofWahl: id => { ueHofWahl = id; uebersichtZeichnen(); }, beiBestellung: bestellungOeffnen, kk: kartenKontext() });
+  const stand = kopf ? standText(kopf.stand) : '';
+  const alt = kopf ? altSatz(standAlter(), takt) : '';
+  $('#ue-stand').textContent = (ueFragt ? (kopf ? stand + ' · wird geholt …' : 'Stand wird geholt …') : ueStatus ? ueStatus + (kopf ? ' ' + stand : '') : kopf ? stand : 'Noch kein Stand.') + (alt ? ' · ' + alt : '');
+  $('#ue-stand').classList.toggle('ue-alt', !!alt);
+  $('#b-ue-neu').classList.toggle('dreht', ueFragt);
+  $('#b-ue-neu').disabled = ueFragt;
+  return true;
+}
+$('#b-ue-ansicht').addEventListener('click', () => { ueEditor = !ueEditor; uebersichtZeichnen(); });
 // Station (A055): die Knöpfe ihrer Handgriffe über den Reitern. sicht = ihr Profil (oder null: keine Station – dann steht keiner da). Ein Scanner-Knopf steht nur da,
 // wenn es den Scanner überhaupt gibt (funktionen.json); „Sprechen“, „Schreiben“ und „Foto, Anhang“ gehören zum Handgriff „sprechen“.
 function stationKnoepfe(sicht) {
@@ -1117,18 +1395,23 @@ const STATION_OHNE_REITER = 'Zum Ansehen ist für dieses Gerät nichts eingestel
 const STATION_HOF_FEHLT = 'Die Hof-Karte ist noch nicht da. Tippe oben auf „Aktualisieren“.';      // das Profil nennt nur den Reiter „Hof“ – und der kommt (wie auf jedem Handy) erst mit einem frischen Stand
 const STATION_LEER = 'Hier steht gerade nichts.';
 function uebersichtZeichnen() {
+  if (ansichtenZeichnen()) return;                                             // Tafel-Ansicht (A055 Stufe 2) oder ihr Editor
   const sicht = stationFrei() ? stationSicht() : null;                         // Station: nur die Reiter und Handgriffe ihres Profils (null = Verwalter-Handy: alles wie bisher)
   if (sicht && sicht.satz && ueStatus === sicht.satz) ueStatus = '';            // der Satz des Laptops („… noch nichts eingestellt“) steht dann schon groß auf der Seite
   const kopf = sicht && sicht.satz ? null : uebersichtFuer(postStand, modus);   // eine Station ohne Profil zeigt nichts – auch keinen älteren Stand
   const leiste = $('#ue-reiter');
   const links = leiste.scrollLeft;
   const mitBelege = !sicht && belegeAktiv() && !!(kopf && kopf.belege);                          // A053: den Reiter „Belege“ gibt es nur für Verwalter-Handys, mit Freigabe und mit Liste vom Laptop
+  const mitTelefonbuch = !sicht && telefonbuchAktiv() && !!(kopf && kopf.telefonbuch);                // A059: den Reiter „Telefonbuch“ gibt es nur für Verwalter-Handys, mit Freigabe und mit Liste vom Laptop
+  const mitArtikel = !sicht && artikelAktiv() && !!(kopf && kopf.artikel);                       // A063: den Reiter „Artikel“ gibt es nur für Verwalter-Handys, mit Freigabe und mit Liste vom Laptop
   const mitHof = funktionAktiv('hof') && !!(kopf && kopf.hof && kopf.hof.karte === 'ok');       // den Reiter „Hof“ gibt es nur mit Freigabe und nur, wenn der Laptop eine Hof-Karte geschickt hat
   const nur = sicht ? sicht.reiter.filter(name => name !== 'hof' || mitHof) : null;
   if (nur && !nur.includes(ueReiter)) { ueReiter = nur[0] || ''; ueHofWahl = ''; }
   if (!nur && ueReiter === 'hof' && !mitHof) ueReiter = 'lager';
   if (ueReiter === 'belege' && !mitBelege) ueReiter = 'lager';
-  zeichneReiter(leiste, ueReiter, name => { if (!ANZEIGE) { ueReiter = name; ueHofWahl = ''; uebersichtZeichnen(); uebersichtAuto('reiter'); } }, mitHof, nur, mitBelege);
+  if (ueReiter === 'artikel' && !mitArtikel) ueReiter = 'lager';
+  if (ueReiter === 'telefonbuch' && !mitTelefonbuch) ueReiter = 'lager';
+  zeichneReiter(leiste, ueReiter, name => { if (!ANZEIGE) { ueReiter = name; ueHofWahl = ''; uebersichtZeichnen(); uebersichtAuto('reiter'); } }, mitHof, nur, mitBelege, mitArtikel, mitTelefonbuch);
   leiste.scrollLeft = links;
   const ohneReiter = !!nur && !nur.length;
   leiste.hidden = ohneReiter;
@@ -1175,6 +1458,16 @@ async function uebersichtAktualisieren() {
       : code === 'bremse' ? 'Bitte kurz warten und noch einmal tippen.' : 'Das Fragen ging nicht.';
   } finally { ueFragt = false; uebersichtZeichnen(); }
 }
+// ---------- Telefonbuch (Funktion „telefonbuch“, A059) ----------
+// Der Reiter „Telefonbuch“ der Übersicht: Stellen und Leute zum Suchen, Telefon und Mail zum Antippen. Die Liste reist mit dem Stand vom Laptop; hier wird nichts geschickt und nichts geändert.
+function telefonbuchAktiv() {
+  return !ANZEIGE && !!geraet && geraet.status === 'frei' && geraet.rolle === 'admin' && funktionAktiv('telefonbuch') && funktionAktiv('uebersicht');
+}
+// ---------- Artikel (Funktion „artikel“, A063) ----------
+// Der Reiter „Artikel“ der Übersicht: der Artikelstamm zum Ansehen (Suche, Warengruppe, „Preise prüfen“). Die Liste reist mit dem Stand vom Laptop; hier wird nichts geschickt und nichts geändert.
+function artikelAktiv() {
+  return !ANZEIGE && !!geraet && geraet.status === 'frei' && geraet.rolle === 'admin' && funktionAktiv('artikel') && funktionAktiv('uebersicht');
+}
 // ---------- Belege (Funktion „belege“, A053) ----------
 // Der Reiter „Belege“ der Übersicht: Rechnungen und Lieferscheine nach Betrieb, mit Suche. Die Liste reist mit dem Stand vom Laptop (nur Angaben). „Original holen“ schickt eine kleine
 // beglaubigte Anfrage; der Laptop legt die PDF als Karte „Für dich“ in die Post dieses Handys (der vorhandene Weg) und antwortet mit einem Satz. Nur Verwalter-Handys.
@@ -1190,7 +1483,34 @@ function belegeKontext() {
     setzeArt: a => { be.art = a; be.offen = ''; be.meldung = ''; uebersichtZeichnen(); },
     toggle: id => { be.offen = be.offen === id ? '' : id; be.meldung = ''; uebersichtZeichnen(); },
     original: id => belegOriginalHolen(id),
+    zuordnen: (id, betrieb) => belegBetriebZuordnen(id, betrieb),                  // N4: nur auf Verwalter-Handys (belegeAktiv gilt nur für sie)
   };
+}
+// Betrieb zuordnen: eine kleine beglaubigte Bitte; der Laptop legt den Auftrag für „dokumente“ an und antwortet mit einem Satz (wie beim Original).
+async function belegBetriebZuordnen(id, betrieb) {
+  if (be.laeuft) return;
+  const fertig = text => { be.meldung = text; be.laeuft = false; uebersichtZeichnen(); };
+  if (!belegeAktiv() || !postAktiv()) return fertig('Dieses Handy darf Belege nicht zuordnen.');
+  const ziel = modus;
+  if (!navigator.onLine) return fertig('Kein Netz – es wurde nichts zugeordnet.');
+  const privatKey = await privaterSchluessel();
+  if (!privatKey || !schluesselFuer(config, ziel)) return fertig('Dieses Handy kann gerade nicht senden. Bitte Claude Bescheid geben.');
+  be.laeuft = true; be.meldung = ''; uebersichtZeichnen();
+  try {
+    const r = await belegBetriebAuftragBauen({ beleg: id, betrieb, instanz: ziel, geraet, config, privatKey });
+    await kasten.senden(geraet.token, r.id, new Blob([r.umschlag], { type: 'application/octet-stream' }), ziel);
+    const ende = Date.now() + BELEG_WARTEN_MS;
+    while (Date.now() < ende) {
+      await new Promise(ok => setTimeout(ok, 1200));
+      await postHolen();
+      const g = uebersichtGrundFuer(postStand, ziel);
+      if (g && g.frage === r.id) return fertig(g.grund);
+    }
+    fertig('Der Laptop antwortet nicht – ist er an?');
+  } catch (err) {
+    const code = err instanceof BriefkastenFehler ? err.code : '';
+    fertig(testBlockiert(ziel, code) ? TEXTE.testNichtBereit : code === 'netz' ? 'Kein Netz – es wurde nichts zugeordnet.' : code === 'bremse' ? 'Bitte kurz warten und noch einmal tippen.' : 'Das Senden ging nicht.');
+  }
 }
 async function belegOriginalHolen(id) {
   if (be.laeuft) return;
@@ -1506,9 +1826,12 @@ window.hofApp = {
                   gesehenSetzen: ms => { const u = postStand.uebersicht && postStand.uebersicht[normModus(modus)]; if (u) u.gesehen = ms; } },        // (nur für Tests: den Stand „alt“ machen)
   bereich: () => entwurf.bereich,
   anmeldung: { handy: anmeldeHandyLesen, vergessen: () => einstellung.loesche(ANMELDE_SPEICHER), einrichten: anmeldeEinrichten },
+  mitteilung: { zeigen: () => mitteilungAnsicht.zeigen(), umschalten: () => mitteilungAnsicht.umschalten(), geklickt: mitteilungGeklickt },
   scan: { code: t => scan.code(t), zustand: () => scan.zustand(), entwurf: () => ({ text: entwurf.text, bereich: entwurf.bereich }) },
   sprache: { cloudAktiv, pauseBis: () => cloudPauseBis, offen: () => erkennungOffen },
-  station: { frei: stationFrei, sicht: () => stationSicht(), rolle: () => (geraet ? geraet.rolle : ''), nimmtAuf: () => !!aufnahme },
+  vorlesen: { ersetze: ({ hoere, sprich, hoerenMoeglich }) => { if (hoere) vo.hoere = hoere; if (sprich) vo.stimme.sprich = sprich; if (typeof hoerenMoeglich === 'boolean') vo.hoerenFest = hoerenMoeglich; postZeichnen(true); },     // (nur für Tests: Erkennung und Stimme austauschen)
+              auto: () => vo.auto, gelesen: () => [...vo.gelesen], laeuft: () => vo.laeuft },
+  station: { abgeholt: abgeholtSenden, frei: stationFrei, sicht: () => stationSicht(), rolle: () => (geraet ? geraet.rolle : ''), nimmtAuf: () => !!aufnahme },
 };
 
 starten();

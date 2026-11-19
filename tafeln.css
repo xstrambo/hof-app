@@ -1,0 +1,43 @@
+/* Tafeln (A055 Stufe 2) und „Bestellung abgeholt“ (Stufe 3): die Übersicht als Raster gewählter Tafeln, der Editor dafür, der Knopf auf der Bestellkarte */
+
+/* Raster: sechs Spalten. klein = zwei, mittel = drei, groß = die ganze Breite. Auf einem schmalen Handy steht alles untereinander. */
+.tafeln{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;align-items:start}
+.tafel{grid-column:span 3;min-width:0;display:flex;flex-direction:column;gap:8px}
+.tafel-klein{grid-column:span 2}
+.tafel-gross{grid-column:1/-1}
+.tafel-kopf{margin:0;padding:2px 2px 0;font-size:17px;font-weight:700;color:var(--text);border-left:5px solid var(--c,var(--gruen));padding-left:10px}
+.tafel-inhalt{display:flex;flex-direction:column;gap:10px;min-width:0}
+.tafel-klein .tafel-inhalt{max-height:20rem;overflow:auto}
+.tafel-mittel .tafel-inhalt{max-height:34rem;overflow:auto}
+.tafel-klein .ue-zahl b{font-size:20px}
+.tafel-gross .tafel-kopf{font-size:22px}
+.tafel-gross .ue-zeile{font-size:19px}
+.tafel-gross .ue-zahl b{font-size:30px}
+@media (max-width:720px){
+  .tafeln{grid-template-columns:minmax(0,1fr)}
+  .tafel,.tafel-klein,.tafel-gross{grid-column:1/-1}
+}
+.ue-alt{color:var(--rot-t,#8f1a20);font-weight:700}
+
+/* Editor am Gerät */
+.ed-titel{margin:0;font-size:22px}
+.ed-liste{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.ed-zeile{display:grid;grid-template-columns:minmax(0,1fr) 7.5rem 52px 52px;gap:8px;align-items:center;padding:6px 10px;background:var(--flaeche);border:1px solid var(--linie);border-radius:8px;--text:var(--hell);--leise:var(--hell-leise);color:var(--hell)}
+.ed-haken{display:flex;align-items:center;gap:10px;min-height:52px;cursor:pointer}
+.ed-haken input{width:44px;height:44px;flex:none;margin:0}
+.ed-name{font-size:18px;overflow-wrap:anywhere}
+.ed-groesse,.ed-takt-wahl{min-height:48px;font-size:17px}
+.ed-pfeil{min-width:52px;min-height:52px;border-radius:8px;border:1.5px solid var(--rahmen);background:var(--flaeche2);color:var(--hell);font-size:24px;font-weight:700;padding:0}
+.ed-pfeil:disabled{opacity:.35}
+.ed-takt{display:flex;flex-direction:column;gap:6px;font-size:17px}
+.ed-knoepfe{display:flex;flex-direction:column;gap:10px}
+@media (max-width:420px){.ed-zeile{grid-template-columns:minmax(0,1fr) 52px 52px}.ed-groesse{grid-column:1/-1;order:5}}
+
+/* Knopf „Bestellung abgeholt“ auf der Bestellkarte einer Station */
+.best-abgeholt{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.best-abgeholt-satz{margin:0;font-size:19px}
+.best-abgeholt-reihe{display:flex;gap:10px}
+.best-abgeholt-reihe .knopf{flex:1}
+.best-abgeholt-knopf{min-height:72px}
+
+#b-ue-ansicht{align-self:flex-start;margin-right:0}

@@ -2,6 +2,8 @@
 // gesendet wird in app.js (normale Warteschlange). Alles, was vom Laptop kommt, wird nur als Text eingesetzt (nie als HTML).
 import { offene, erledigte, dinge, ergebnisText, schluesselVon } from './post.js';
 import { TEST } from './modus.js';
+import { fragenText, sprachAntwort } from './vorlesen.js';
+import { nachrichtFuss } from './nachricht-ansicht.js';
 
 function el(tag, klasse, text) {
   const e = document.createElement(tag);
@@ -76,7 +78,7 @@ export function zeichnePost(wurzel, ctx) {
 
 function chip(t) { return el('span', 'chip', t); }
 
-const DING_NAME = { dokument: 'Dokument', ergebnis: 'Ergebnis', hinweis: 'Hinweis' };
+const DING_NAME = { dokument: 'Dokument', ergebnis: 'Ergebnis', hinweis: 'Hinweis', nachricht: 'Nachricht' };
 function groesseText(b) {
   return b < 1024 * 1024 ? Math.max(1, Math.round(b / 1024)) + ' KB' : (b / 1048576).toFixed(1).replace('.', ',') + ' MB';
 }
@@ -109,6 +111,7 @@ function dingKarte(d, ctx) {
       ? `Das PDF ist zu groß fürs Handy (mehr als 10 MB). Es liegt am Laptop${k.datei_name ? ': ' + k.datei_name : ''}.`
       : 'Das PDF konnte nicht aufs Handy geladen werden. Es liegt am Laptop.'));
   }
+  if (k.ding === 'nachricht') nachrichtFuss(karte, zeile, d, ctx);               // A025: Kopieren, Teilen, Geschickt (oder: schon geschickt)
   const fertig = el('button', 'knopf neben', 'Erledigt');
   fertig.type = 'button';
   fertig.dataset.aktion = 'erledigt';
@@ -188,6 +191,39 @@ function anmeldeKarte(f, ctx) {
   return karte;
 }
 
+// A031: der Knopf „Vorlesen“ an einer Rückfrage (noch einmal tippen: anhalten). vo = { sprich(Text) -> Promise, stopp() }
+function vorlesenKnopf(f, vo) {
+  const b = el('button', 'knopf neben klein vorlesen-knopf', 'Vorlesen');
+  b.type = 'button';
+  b.dataset.aktion = 'vorlesen';
+  let liest = false;
+  b.addEventListener('click', async () => {
+    if (liest) { vo.stopp(); return; }
+    const text = fragenText(f);
+    if (!text) return;
+    liest = true; b.textContent = 'Anhalten'; b.setAttribute('aria-pressed', 'true');
+    try { await vo.sprich(text); } finally { liest = false; b.textContent = 'Vorlesen'; b.removeAttribute('aria-pressed'); }
+  });
+  return b;
+}
+
+// A031: der Knopf „Per Sprache antworten“ (nur wenn das Handy hören und sprechen kann). abh: waehle(Nummer), setze(Text), loesche(), senden() -> Promise<boolean>
+function sprachKnopf(feld, kopf, vo, abh) {
+  if (!vo || !vo.hoere || !vo.sprich || !vo.hoerenMoeglich) return;
+  const status = el('p', 'sprach-status leise klein');
+  status.setAttribute('role', 'status');
+  status.hidden = true;
+  const b = el('button', 'knopf neben sprach-knopf', 'Per Sprache antworten');
+  b.type = 'button';
+  b.dataset.aktion = 'sprechen';
+  b.addEventListener('click', async () => {
+    b.disabled = true;
+    try { await sprachAntwort(kopf, { ...abh, hoere: vo.hoere, sprich: vo.sprich, status: t => { status.textContent = t; status.hidden = !t; } }); }
+    finally { b.disabled = false; }
+  });
+  feld.append(b, status);
+}
+
 function frageKarte(f, ctx) {
   const k = f.kopf;
   if (k.frage_art === 'anmeldung' && k.anmeldung) return anmeldeKarte(f, ctx);
@@ -202,6 +238,7 @@ function frageKarte(f, ctx) {
   kopf.appendChild(z);
   karte.appendChild(kopf);
   karte.appendChild(el('p', 'frage-text', k.text));
+  if (ctx.vorlesen && ctx.vorlesen.sprich) karte.appendChild(vorlesenKnopf(f, ctx.vorlesen));       // A031: „Vorlesen“ (Gerätestimme)
   if (k.nachricht) {                                                 // die ganze Nachricht, auf die sich die Frage bezieht (nur Text, aufgeklappt)
     const box = el('details', 'nachricht');
     box.open = true;
@@ -237,6 +274,7 @@ function frageKarte(f, ctx) {
     senden.disabled = true;
     let ok = false;
     try { ok = await ctx.beiAntwort(f, antwort); } finally { if (!ok) senden.disabled = false; }
+    return ok === true;
   };
 
   if (istAenderungsliste(f)) {
@@ -304,6 +342,10 @@ function frageKarte(f, ctx) {
     senden.addEventListener('click', () => { if (Number.isInteger(entwurf.wahl)) fertigMelden({ wahl: entwurf.wahl }); });
     feld.append(wahl, senden);
     aktualisieren();
+    sprachKnopf(feld, k, ctx.vorlesen, {                                                  // A031: per Sprache antworten
+      waehle: i => { entwurf.wahl = i; aktualisieren(); }, setze: () => {}, loesche: () => { entwurf.wahl = undefined; aktualisieren(); },
+      senden: () => (Number.isInteger(entwurf.wahl) ? fertigMelden({ wahl: entwurf.wahl }) : Promise.resolve(false)),
+    });
   } else {
     const eingabe = k.eingabe || 'text';
     const feldEl = el('input', 'antwort-text');
@@ -323,6 +365,10 @@ function frageKarte(f, ctx) {
     senden.addEventListener('click', () => { const t = feldEl.value.trim(); if (t) fertigMelden({ text: t }); });
     feld.append(feldEl, senden);
     aktualisieren();
+    sprachKnopf(feld, k, ctx.vorlesen, {                                                  // A031: per Sprache antworten (freie Antworten werden nur eingetragen)
+      waehle: () => {}, setze: t => { feldEl.value = t; entwurf.text = t; aktualisieren(); }, loesche: () => { feldEl.value = ''; entwurf.text = ''; aktualisieren(); },
+      senden: () => { const t = feldEl.value.trim(); return t ? fertigMelden({ text: t }) : Promise.resolve(false); },
+    });
   }
   karte.appendChild(feld);
   return karte;

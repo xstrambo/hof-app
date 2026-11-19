@@ -105,6 +105,8 @@ input::placeholder,textarea::placeholder{color:var(--hell-leise);opacity:1}
 @container (max-height:71px){#s-start .liste-bereich>*{display:none}}                                  /* kein Platz für Überschrift und einen Eintrag: nichts anzeigen statt Reste */
 @container (max-height:97px){#s-start .liste-bereich.mit-hinweis>.verlauf-hinweis{display:none}}        /* mit der Zeile zum anderen Modus braucht es 26 Pixel mehr: reicht der Platz nicht, entfällt zuerst nur sie */
 @container (max-height:150px){#s-start .liste-bereich.mit-hinweis:has(.verlauf .eintrag+.eintrag)>.verlauf-hinweis{display:none}}   /* gibt es zwei Einträge, soll der zweite nicht wegen dieser Zeile fehlen: sie steht nur, wenn für Überschrift, Zeile und zwei Einträge Platz ist */
+@container (max-height:97px){#s-start .liste-bereich>.ws-hinweis{display:none}}                          /* A032: die Zeile „wartet auf Netz (n)“ entfällt zuerst, wenn der Platz knapp wird – die wartenden Einträge sagen es selbst */
+@container (max-height:170px){#s-start .liste-bereich:has(.verlauf .eintrag+.eintrag)>.ws-hinweis{display:none}}   /* mit zwei Einträgen soll der zweite nicht wegen dieser Zeile fehlen */
 @container (max-height:112px){#s-start .eintrag-quittung{-webkit-line-clamp:1}}                       /* wenig Platz: die Quittung nur eine Zeile hoch (endet dann mit „…“), damit der neueste Eintrag samt Quittung noch hineinpasst */
 @container (max-height:91px){#s-start .liste-bereich:has(.verlauf>.eintrag:first-child.mit-quittung)>.ueberschrift{display:none}}   /* noch weniger: die Überschrift entfällt, der neueste Eintrag mit seiner Quittung geht vor */
 #s-start .mitte{display:contents}                                 /* Mikrofon und Text sind selbst Teile der Spalte: so schrumpft nur das Mikrofon, wenn der Platz knapp wird */
@@ -148,7 +150,7 @@ body.mit-scan #s-start{--fest:352px}                              /* der Knopf �
 .verlauf-hinweis{margin:-2px 0 0;padding-left:4px;font-size:14px;line-height:1.3;color:var(--leise)}
 .verlauf .eintrag{flex-direction:row;align-items:center;gap:8px;padding:10px 12px;min-height:46px;border-radius:8px}
 .verlauf .eintrag.test{border-left:6px solid var(--test);padding-left:8px}
-.verlauf .eintrag.mit-quittung{flex-wrap:wrap;row-gap:3px}                                                   /* die Quittung steht in einer eigenen Zeile unter der Nachricht, im selben Kasten */
+.verlauf .eintrag.mit-quittung,.verlauf .eintrag.mit-hinweiszeile{flex-wrap:wrap;row-gap:3px}                                                   /* die Quittung steht in einer eigenen Zeile unter der Nachricht, im selben Kasten */
 .eintrag-quittung{flex:0 0 100%;min-width:0;font-size:14px;line-height:1.3;color:var(--leise);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
 .eintrag-quittung::before{content:"\2713\00a0";color:var(--gruen-licht);font-weight:700}                                          /* der Haken: es ist angekommen */
 /* Die Karte „Bestätigen?“ (Funktion „bestaetigung“): steht im selben Kasten wie die Nachricht, in einer eigenen Zeile darunter */
@@ -625,6 +627,7 @@ body.mit-leiste #s-gesendet .knopf-stapel{bottom:calc(var(--nav) + env(safe-area
 .einladung-hilfe{margin:4px 0 0;line-height:1.35}
 body.station #b-zurueck-uebersicht{display:none}                         /* die Übersicht ist auf einer Station der Anfang: kein „Zurück“ */
 body.station #s-uebersicht .zurueck-kopf{padding-left:20px}
+
 body.station .untere-leiste{display:flex}                                 /* die Leiste zeigt nur, was die Station hat – die Einträge teilen sich die Breite */
 body.station .untere-leiste>*{flex:1 1 0;min-width:0}
 
@@ -643,6 +646,8 @@ body.station .untere-leiste>*{flex:1 1 0;min-width:0}
 .anmelde-fehler{color:var(--rot-t)}
 .anmelde-aktion{display:flex;flex-direction:column;margin-top:10px}
 .anmelde-aktion .knopf{width:100%}
+.mitteilung-block{margin-top:14px;padding-top:12px;border-top:1px solid rgba(128,128,128,.28)}
+.mitteilung-block p{margin:0 0 6px}
 
 /* A053: Belege (Reiter der Übersicht) */
 .be-wahl{display:flex;flex-wrap:wrap;gap:6px}
@@ -660,3 +665,65 @@ body.station .untere-leiste>*{flex:1 1 0;min-width:0}
 .be-fname{display:inline-block;min-width:5.5em;color:var(--leise)}
 .be-klein{margin:6px 0 0;font-size:13px;color:var(--leise)}
 .be-original{margin-top:8px;width:100%}
+
+.zeit .eintrag-lese{display:inline;flex:none;font-size:inherit;font-style:italic;white-space:nowrap}   /* „Ich lese …“ anstelle der Uhrzeit: keine eigene Zeile */
+/* A051: Fenster „Das habe ich verstanden“ – kleiner Dialog über der Seite, Material-Stil wie die Blätter */
+.fenster-huelle{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;padding:16px}
+.fenster-huelle[hidden]{display:none}
+.fenster-hinter{position:absolute;inset:0;border:0;background:rgba(22,33,27,.5)}
+.fenster{position:relative;width:100%;max-width:420px;max-height:calc(100% - 32px);background:var(--flaeche);color:var(--hell);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:14px;box-shadow:0 8px 32px rgba(0,0,0,.35);--knopf-grund:var(--flaeche2)}
+.fenster-titel{font-size:21px;line-height:1.25;overflow-wrap:anywhere}
+.fenster-inhalt{display:flex;flex-direction:column;gap:12px;overflow-y:auto;min-height:0}
+.fenster-teil{display:flex;flex-direction:column;gap:4px}
+.fenster-teilname{font-size:16px;color:var(--gruen)}
+.fenster-zeile{display:flex;gap:8px;font-size:17px;line-height:1.3;overflow-wrap:anywhere}
+.fenster-name{flex:0 0 auto;color:var(--leise)}
+.fenster-wert{flex:1 1 auto;min-width:0;font-weight:700}
+.fenster-zeile.fehlt .fenster-wert{color:var(--rot-t);font-style:italic}
+.fenster-satz{margin:0;font-size:17px;line-height:1.35;overflow-wrap:anywhere}
+.fenster-knoepfe{display:flex;gap:10px}
+.fenster-knopf{flex:1 1 0;min-height:48px;border-radius:8px;border:2px solid var(--rahmen);background:var(--flaeche2);font-weight:700;font-size:18px}
+.fenster-knopf.fenster-stimmt,.fenster-knopf.fenster-ok{border-color:var(--gruen);background:var(--gruen);color:var(--auf-gruen)}
+.fenster-knopf.fenster-falsch{border-color:var(--rot);color:var(--rot-t)}
+.fenster-knopf:disabled{opacity:.5}
+.eintrag-lese{flex:0 0 100%;min-width:0;font-size:14px;line-height:1.3;color:var(--leise);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
+.eintrag-wartet{flex:0 0 100%;min-width:0;font-size:14px;line-height:1.3;font-weight:700;color:var(--rot-t);overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow-wrap:anywhere}
+@container (max-height:112px){#s-start .eintrag-lese,#s-start .eintrag-wartet{-webkit-line-clamp:1}}
+@container (max-height:175px){#s-start .verlauf .eintrag>.eintrag-lese,#s-start .verlauf .eintrag>.eintrag-wartet{display:none}}   /* A051: wenig Platz: die Hinweiszeile unter der Nachricht entfällt, damit der Verlauf seine zwei Einträge behält (die Karte selbst steht ohnehin da) */
+.ws-hinweis{margin:-2px 0 0;padding-left:4px;font-size:14px;line-height:1.3;color:var(--gelb,#f3d23b)}   /* A032: „wartet auf Netz (2)“ unter „Zuletzt gesendet“ */
+.ws-hinweis.ws-alt{font-weight:600}
+.vorlesen-zeile:not([hidden]){display:flex;align-items:center;gap:10px;min-height:44px;margin:0 0 6px;font-size:15px}   /* A031: Schalter „Rückfragen automatisch vorlesen“ */
+.vorlesen-zeile input{width:24px;height:24px;flex:none}
+.frage .vorlesen-knopf,.frage .sprach-knopf{margin:6px 8px 0 0;min-height:44px}
+.frage .sprach-status{margin:6px 0 0}
+.ding-entwurf{margin:0;padding:10px 12px;border:1px solid var(--linie);border-radius:8px;background:var(--flaeche2);color:var(--hell);font-size:17px;line-height:1.4;white-space:pre-wrap;overflow-wrap:anywhere;-webkit-user-select:text;user-select:text}
+/* A063: Artikel (Reiter der Übersicht) */
+.ar-wahl{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+.ar-knopf{min-height:44px;padding:0 12px;border-radius:8px;border:1.5px solid var(--rahmen);background:var(--flaeche);color:var(--leise);font-size:15px;font-weight:700}
+.ar-knopf.an{color:var(--text);border-color:var(--gruen-licht);background:var(--flaeche2)}
+.ar-zeile{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:6px 10px;width:100%;min-height:56px;padding:10px 14px;border-top:1px solid var(--linie)}
+.ar-links{min-width:0;display:flex;flex-direction:column;gap:2px;flex:1 1 55%}
+.ar-name{font-weight:700;overflow-wrap:anywhere}
+.ar-unter{font-size:14px;color:var(--leise);overflow-wrap:anywhere}
+.ar-rechts{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px;max-width:45%}
+.ar-preis{font-size:14px;white-space:nowrap}
+.ar-marken{flex:0 0 100%;display:flex;flex-wrap:wrap;gap:4px}
+/* A059: Telefonbuch (Reiter der Übersicht) */
+.tb-gruppe{display:flex;flex-direction:column;border-top:1px solid var(--linie)}
+.tb-gruppe:first-child{border-top:0}
+.tb-zeile{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;width:100%;min-height:56px;padding:10px 14px;border:0;border-top:1px solid var(--linie);background:transparent;color:var(--text);text-align:left;font:inherit}
+.tb-gruppe > .tb-zeile:first-child{border-top:0}
+.tb-zeile.an{background:var(--flaeche2);box-shadow:inset 3px 0 0 var(--gruen-licht)}
+.tb-stellenzeile{background:var(--flaeche);padding-top:12px}
+.tb-stellenzeile .tb-name{font-size:17px}
+.tb-name{font-weight:700;overflow-wrap:anywhere}
+.tb-unter{font-size:14px;color:var(--leise);overflow-wrap:anywhere}
+.tb-detail{display:flex;flex-direction:column;gap:8px;padding:8px 14px 14px;background:var(--flaeche2)}
+.tb-detail p{margin:0;overflow-wrap:anywhere}
+.tb-stelle-name,.tb-zust{color:var(--leise);font-size:15px}
+.tb-verweis{display:flex;flex-direction:column;justify-content:center;gap:2px;min-height:56px;padding:8px 14px;border-radius:8px;border:1.5px solid var(--gruen-licht);background:var(--flaeche);color:var(--text);text-decoration:none}
+.tb-was{font-size:14px;color:var(--leise)}
+.tb-wert{font-size:19px;font-weight:700;overflow-wrap:anywhere}
+.tb-nur,.tb-notiz{font-size:15px;color:var(--leise)}
+.tb-ohne-kopf{margin:0;padding:12px 14px 6px;font-weight:700;color:var(--leise)}
+.tb-niemand{padding:8px 14px}

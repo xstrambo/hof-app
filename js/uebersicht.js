@@ -4,6 +4,8 @@ import { UEBERSICHT_TABS } from './post.js';
 import { HOF_REITER, zeichneHof } from './hof-ansicht.js';
 import { zeichneMaschDetail, zeichneEntfernt } from './karte-ansicht.js';
 import { BELEGE_REITER, zeichneBelege } from './belege-ansicht.js';
+import { ARTIKEL_REITER, zeichneArtikel } from './artikel-ansicht.js';
+import { TELEFONBUCH_REITER, zeichneTelefonbuch } from './telefonbuch-ansicht.js';
 
 export const REITER = {
   lager: { name: 'Warenlager', farbe: '#2e9d6a', icon: '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>' },
@@ -55,11 +57,11 @@ export function passt(zeile, suche) {
 // Die Reiter-Leiste (Knöpfe). beiWahl(name) wird beim Antippen gerufen.
 // mitHof: der Reiter „Hof“ (Funktion „hof“) kommt ans Ende, wenn die Funktion für dieses Handy gilt.
 // nur (optional): eine Liste von Reiter-Namen – dann stehen nur diese da, in der gewohnten Reihenfolge (eine Station, A055, zeigt nur die Reiter ihres Profils).
-export function zeichneReiter(wurzel, aktiv, beiWahl, mitHof = false, nur = null, mitBelege = false) {
+export function zeichneReiter(wurzel, aktiv, beiWahl, mitHof = false, nur = null, mitBelege = false, mitArtikel = false, mitTelefonbuch = false) {
   wurzel.replaceChildren();
-  const alle = [...UEBERSICHT_TABS, ...(mitHof ? ['hof'] : []), ...(mitBelege ? ['belege'] : [])];      // „belege“ (A053): nur Verwalter-Handys, nur mit Freigabe und mit Liste vom Laptop
+  const alle = [...UEBERSICHT_TABS, ...(mitHof ? ['hof'] : []), ...(mitBelege ? ['belege'] : []), ...(mitArtikel ? ['artikel'] : []), ...(mitTelefonbuch ? ['telefonbuch'] : [])];      // „belege“ (A053): nur Verwalter-Handys, nur mit Freigabe und mit Liste vom Laptop
   for (const name of Array.isArray(nur) ? alle.filter(n => nur.includes(n)) : alle) {
-    const r = name === 'hof' ? HOF_REITER : name === 'belege' ? BELEGE_REITER : REITER[name];
+    const r = name === 'hof' ? HOF_REITER : name === 'belege' ? BELEGE_REITER : name === 'artikel' ? ARTIKEL_REITER : name === 'telefonbuch' ? TELEFONBUCH_REITER : REITER[name];
     const b = el('button', 'ue-reiter' + (name === aktiv ? ' an' : ''));
     b.type = 'button';
     b.dataset.reiter = name;
@@ -142,6 +144,8 @@ export const KEINE_MASCHINEN = 'Noch keine Maschinen angelegt – sag z. B. „N
 // Der Inhalt eines Reiters. kopf = der geprüfte Stand (oder null: noch keiner da). beiBestellung(d): eine Zeile mit Einzelheiten (Vorbestellungen) wurde angetippt.
 export function zeichneInhalt(wurzel, kopf, name, suche, hofWahl = '', beiHofWahl = () => {}, beiBestellung = null, kk = null, bk = null) {
   wurzel.replaceChildren();
+  if (name === 'telefonbuch') { zeichneTelefonbuch(wurzel, kopf && kopf.telefonbuch ? kopf.telefonbuch : null, suche); return; }
+  if (name === 'artikel') { zeichneArtikel(wurzel, kopf && kopf.artikel ? kopf.artikel : null, suche); return; }
   if (name === 'belege') { zeichneBelege(wurzel, kopf && kopf.belege ? kopf.belege : null, suche, bk); return; }
   if (name === 'hof') { zeichneHof(wurzel, kopf && kopf.hof ? kopf.hof : null, hofWahl, suche, beiHofWahl, kk); return; }
   const tab = kopf && kopf.tabs ? kopf.tabs[name] : null;

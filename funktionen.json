@@ -1,5 +1,5 @@
 {
-  "_hinweis": "Neue Funktionen der Hof-App: \"test\" = nur sichtbar, wenn der Schalter oben auf Test steht. \"alle\" = auch im echten Betrieb. Auf \"alle\" stellt Claude erst nach Niklas' Ja zum Punkt in der nummerierten Änderungsliste. Fehlt eine Funktion hier, gilt \"test\". Namen: klein, mit Unterstrich.",
+  "_hinweis": "Neue Funktionen der Hof-App: \"test\" = nur sichtbar, wenn der Schalter oben auf Test steht. \"alle\" = auch im echten Betrieb. Seit 18.11.2026 (Niklas: „Ja alles immer ins echte“) stehen neue Funktionen gleich auf \"alle\", wenn der ganze Testlauf grün ist. Fehlt eine Funktion hier, gilt \"test\". Namen: klein, mit Unterstrich.",
   "rueckfragen": "alle",
   "aenderungen": "alle",
   "fuer_dich": "alle",
@@ -8,10 +8,18 @@
   "uebersicht": "alle",
   "kacheln": "alle",
   "bestaetigung": "alle",
+  "verstanden": "alle",
   "scanner": "alle",
   "hof": "alle",
   "untere_leiste": "alle",
   "hofkarte_bearbeiten": "alle",
   "anmelde_freigabe": "alle",
-  "belege": "alle"
+  "anmelde_mitteilung": "alle",
+  "belege": "alle",
+  "offline": "alle",
+  "vorlesen": "alle",
+  "kundennachricht": "alle",
+  "ansichten": "alle",
+  "artikel": "alle",
+  "telefonbuch": "alle"
 }

@@ -6,8 +6,8 @@ export const OHNE_BETRIEB = '__ohne__';
 export const ALLE_BETRIEBE = '__alle__';
 export const BELEGE_ZEILEN_MAX = 150;
 const MONATE = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
-const PRUEF_TEXT = { 'passt': 'passt zur Lieferung', 'weicht ab': 'weicht ab', 'kein Lieferschein': 'ohne Lieferschein', 'nicht prüfbar': 'nicht prüfbar' };
-const PRUEF_TON = { 'passt': 'gruen', 'weicht ab': 'rot', 'kein Lieferschein': 'gelb', 'nicht prüfbar': '' };
+const PRUEF_TEXT = { 'passt': 'passt zur Lieferung', 'weicht ab': 'weicht ab', 'kein Lieferschein': 'ohne Lieferschein', 'nicht prüfbar': 'nicht prüfbar', 'ohne Lieferung (Dienstleistung)': 'ohne Lieferung (Dienstleistung)' };
+const PRUEF_TON = { 'passt': 'gruen', 'weicht ab': 'rot', 'kein Lieferschein': 'gelb', 'nicht prüfbar': '', 'ohne Lieferung (Dienstleistung)': '' };
 
 function el(name, klasse, text) {
   const e = document.createElement(name);
@@ -53,7 +53,7 @@ function knopf(text, an, beiTipp, daten) {
   return b;
 }
 
-function einzelheiten(z, bk, betriebsnamen) {
+function einzelheiten(z, bk, betriebsnamen, betriebe) {
   const k = el('div', 'be-detail');
   const feld = (name, wert) => { if (wert) { const p = el('p', 'be-feld'); p.append(el('span', 'be-fname', name), document.createTextNode(wert)); k.append(p); } };
   feld('Art', z.a);
@@ -65,6 +65,24 @@ function einzelheiten(z, bk, betriebsnamen) {
   feld('Fällig', tagText(z.f));
   feld('Prüfung', PRUEF_TEXT[z.p] || '');
   feld('Auszug', z.t);
+  if (!z.b && bk && bk.zuordnen) {                        // N4: nur Verwalter-Handys bekommen den Handgriff (der Laptop prüft es noch einmal)
+    const kasten = el('div', 'be-zuordnen');
+    if (z.w) {
+      kasten.append(el('p', 'be-klein be-wird', 'Wird zugeordnet … Der Laptop trägt es beim nächsten Lauf ein.'));
+    } else {
+      kasten.append(el('p', 'be-klein', 'Zu welchem Betrieb gehört dieser Beleg?'));
+      for (const b of betriebe) {
+        const k2 = el('button', 'knopf be-betrieb', b.n);
+        k2.type = 'button';
+        k2.dataset.beleg = z.i;
+        k2.dataset.betrieb = b.i;
+        k2.disabled = !!bk.laeuft;
+        k2.addEventListener('click', () => bk.zuordnen(z.i, b.i));
+        kasten.append(k2);
+      }
+    }
+    k.append(kasten);
+  }
   if (z.o && bk) {
     const b = el('button', 'knopf be-original', bk.laeuft ? 'Original wird geholt …' : 'Original holen');
     b.type = 'button';
@@ -124,10 +142,11 @@ export function zeichneBelege(wurzel, belege, suche, bk) {
     const rechts = el('span', 'be-rechts');
     rechts.append(el('span', 'ue-marke gruen be-art', z.a));
     if (z.p) rechts.append(el('span', 'ue-marke ' + (PRUEF_TON[z.p] || 'gelb') + ' be-pruef', PRUEF_TEXT[z.p]));
+    if (!z.b && z.w) rechts.append(el('span', 'ue-marke be-wird', 'wird zugeordnet'));
     zeile.append(links, rechts);
     if (bk) zeile.addEventListener('click', () => bk.toggle(z.i));
     karte.append(zeile);
-    if (offen) karte.append(einzelheiten(z, bk, namen));
+    if (offen) karte.append(einzelheiten(z, bk, namen, belege.betriebe));
   }
   if (treffer.length > BELEGE_ZEILEN_MAX) wurzel.append(el('p', 'ue-leer', `… und ${treffer.length - BELEGE_ZEILEN_MAX} weitere – bitte die Suche eingrenzen`));
   if (belege.mehr) wurzel.append(el('p', 'ue-leer', `… und ${belege.mehr} ältere Belege (am Laptop)`));

@@ -16,6 +16,7 @@
 import { entschluesseln, macSchluessel, beglaubigtOeffnen, auspacken, packen, beglaubigen, verschluesseln, L2H, H2L } from './paket.js';
 import { ECHT, TEST, normModus, schluesselFuer } from './modus.js';
 import { scanListe } from './scan-daten.js';
+import { mitteilungAnwenden, mitteilungNormieren } from './mitteilung.js';
 
 export const STAND_NAME = 'post';
 export const EINGABEN = ['zahl', 'ganzzahl', 'masse', 'text'];
@@ -36,7 +37,8 @@ const MAX_BESTAETIGUNGEN = 100;   // Karten „Bestätigen?“, solange die Nach
 export const KARTEN_STAENDE = ['offen', 'stimmt', 'falsch'];
 export const KARTEN_WAHLEN = ['stimmt', 'falsch'];
 export const MAX_PDF = 10 * 1024 * 1024;     // größer als 10 MB bekommt das Handy nicht (der Laptop schickt dann nur den Hinweis)
-export const DING_ARTEN = ['dokument', 'ergebnis', 'hinweis'];
+export const DING_ARTEN = ['dokument', 'ergebnis', 'hinweis', 'nachricht'];
+export const NACHRICHT_ANLAESSE = ['zusage', 'abholbereit', 'aenderung'];
 
 export const schluesselVon = (instanz, id) => `${normModus(instanz)}:${id}`;
 
@@ -122,6 +124,14 @@ const dateiName = x => text(x, 100).replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_') |
 export const pdfSignatur = b => !!b && b.length >= 5 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46 && b[4] === 0x2d;    // „%PDF-“
 export const dateiSchluessel = key => `post-datei:${key}`;
 
+// Der feste Teil einer Karte „Nachricht an Kunden“: Anlass, Fassung, Bestellung (VB-…), Kunde, ob Niklas schon „Geschickt“ gesagt hat. Alles andere fällt weg.
+const NACHRICHT_BESTELLUNG = /^VB-\d{4}-\d{4,6}$/;
+function nachrichtBlock(n, bezug) {
+  if (!istObjekt(n) || !NACHRICHT_ANLAESSE.includes(n.anlass) || !Number.isInteger(n.fassung) || n.fassung < 1 || n.fassung > 999) return null;
+  if (typeof n.bestellung !== 'string' || !NACHRICHT_BESTELLUNG.test(n.bestellung) || n.bestellung !== bezug) return null;
+  return { anlass: n.anlass, fassung: n.fassung, bestellung: n.bestellung, kunde: text(n.kunde, 60), geschickt: n.geschickt === true };
+}
+
 export function dingKopf(k) {
   if (!istObjekt(k) || k.art !== 'fuer_dich') return null;
   const id = typeof k.id === 'string' ? k.id : '';
@@ -133,7 +143,10 @@ export function dingKopf(k) {
     ? { name: dateiName(meta.name), groesse: meta.groesse } : null;
   const fehlt = k.ding === 'dokument' && !datei && ['zu_gross', 'ungueltig'].includes(k.datei_fehlt) ? k.datei_fehlt : '';
   const werkzeug = text(k.werkzeug, 60);
+  const nachricht = k.ding === 'nachricht' ? nachrichtBlock(k.nachricht, text(k.bezug, 80)) : null;       // A025: der Entwurf einer Nachricht an einen Kunden
+  if (k.ding === 'nachricht' && !nachricht) return null;
   return {
+    ...(nachricht ? { nachricht } : {}),
     id, ding: k.ding, titel, text: textMitZeilen(k.text, 1500), werkzeug, werkzeug_titel: text(k.werkzeug_titel, 60) || werkzeug,
     bezug: text(k.bezug, 80), erstellt: text(k.erstellt, 40), gesendet: zeitText(k.gesendet),
     ...(datei ? { datei } : {}), ...(fehlt ? { datei_fehlt: fehlt, datei_name: dateiName(k.datei_name) } : {}),
@@ -349,6 +362,7 @@ export function bestellDetail(x) {
   const aus = { kunde, wann: einzeilig(x.wann, 40), status: einzeilig(x.status, 24), pos, mehr: Number.isInteger(x.mehr) && x.mehr > 0 && x.mehr < 1e6 ? x.mehr : 0 };
   for (const [feld, n] of [['wunsch', 160], ['notiz', 200], ['herkunft', 30], ['kontakt', 80], ['betrieb', 40], ['vorher', 40]]) { const s = einzeilig(x[feld], n); if (s) aus[feld] = s; }
   if (ZAHLWEGE.includes(x.zahlweg)) aus.zahlweg = x.zahlweg;
+  if (typeof x.nr === 'string' && /^V[BE]-\d{4}-\d{3,6}$/.test(x.nr)) aus.nr = x.nr;            // A055 Stufe 3: die Nummer der Bestellung (nur für eine Station, die „abgeholt“ melden darf)
   return aus;
 }
 
@@ -365,7 +379,7 @@ function uebersichtTab(t) {
     const a = einzeilig(r.a, 80);
     if (!a) return;
     const m = istObjekt(r.m) && einzeilig(r.m.t, 24) ? { t: einzeilig(r.m.t, 24), ton: MARKE_TON.includes(r.m.ton) ? r.m.ton : 'gelb' } : null;
-    const d = bestellDetail(details[i]);                          // die Karte zur Zeile (nur Reiter „best“): gleiche Stelle in der Liste der Einzelheiten
+    const d = bestellDetail(details[i] !== undefined ? details[i] : r.d);                          // die Karte zur Zeile (nur Reiter „best“): gleiche Stelle in der Liste der Einzelheiten
     zeilen.push({ a, k: einzeilig(r.k, 120), m, z: einzeilig(r.z, 24), ...(d ? { d } : {}) });
   });
   const aus = {
@@ -384,16 +398,27 @@ function uebersichtTab(t) {
 export const STATION_REITER = [...UEBERSICHT_TABS, 'hof'];
 export const SCAN_HANDGRIFFE = ['inventur', 'wareneingang', 'verkauf'];        // die drei Arten des Scanners
 export const STATION_HANDGRIFFE = [...SCAN_HANDGRIFFE, 'sprechen'];            // sprechen = freie Nachrichten (Sprache, Text, Anhang)
+export const STATION_ABGEHOLT = 'abgeholt';                                    // „Bestellung abgeholt“ (A055 Stufe 3): kein Handgriff des Scanners, steht aber in der Liste der Handgriffe, wenn das Profil es erlaubt
+const STATION_GROESSEN = ['klein', 'mittel', 'gross'];
+const STATION_TAKTE = [5, 15, 30, 60];
 export function profilKopf(p) {
   const bekannt = (liste, erlaubt) => (Array.isArray(liste) ? erlaubt.filter(n => liste.includes(n)) : []);
-  return istObjekt(p) ? { reiter: bekannt(p.reiter, STATION_REITER), handgriffe: bekannt(p.handgriffe, STATION_HANDGRIFFE) } : { reiter: [], handgriffe: [] };
+  if (!istObjekt(p)) return { reiter: [], handgriffe: [] };
+  const aus = { reiter: bekannt(p.reiter, STATION_REITER), handgriffe: bekannt(p.handgriffe, [...STATION_HANDGRIFFE, STATION_ABGEHOLT]) };
+  const tafeln = [];                                                           // Stufe 2: die Tafeln der Station (Größe, Reihenfolge) – nur für erlaubte Reiter, jede einmal
+  for (const t of Array.isArray(p.tafeln) ? p.tafeln : []) {
+    if (istObjekt(t) && aus.reiter.includes(t.art) && !tafeln.some(x => x.art === t.art)) tafeln.push({ art: t.art, groesse: STATION_GROESSEN.includes(t.groesse) ? t.groesse : 'mittel' });
+  }
+  if (tafeln.length) aus.tafeln = tafeln;
+  if (STATION_TAKTE.includes(p.takt)) aus.takt = p.takt;
+  return aus;
 }
 
 // Die Belege (Funktion „belege“, A053): Rechnungen und Lieferscheine aus dem Verzeichnis des Laptops – nur Angaben, nie die Dateien. Streng geprüft und gekürzt, nur Text.
 // Je Zeile: i Kennung, a Art, d Datum (JJJJ-MM-TT), s Absender, b Betrieb (Kennung, leer = nicht belegt), n Nummer, v Betrag, f Fälligkeit (JJJJ-MM-TT), p Prüfstatus der Rechnung,
 // t Textauszug, o 1 = das Original lässt sich aufs Handy holen. Was fehlt, bleibt leer – nichts wird ergänzt.
 export const BELEGE_MAX_ZEILEN = 800;
-export const BELEG_PRUEFUNG = ['passt', 'weicht ab', 'kein Lieferschein', 'nicht prüfbar'];
+export const BELEG_PRUEFUNG = ['passt', 'weicht ab', 'kein Lieferschein', 'nicht prüfbar', 'ohne Lieferung (Dienstleistung)'];
 const BELEG_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,29}$/;
 const TAG = /^\d{4}-\d{2}-\d{2}$/;
 export function belegeListe(b) {
@@ -410,10 +435,69 @@ export function belegeListe(b) {
     const a = einzeilig(r.a, 30);
     if (!a) continue;
     zeilen.push({ i: r.i, a, d: typeof r.d === 'string' && TAG.test(r.d) ? r.d : '', s: einzeilig(r.s, 60), b: einzeilig(r.b, 30), n: einzeilig(r.n, 30), v: einzeilig(r.v, 24),
-                  f: typeof r.f === 'string' && TAG.test(r.f) ? r.f : '', p: BELEG_PRUEFUNG.includes(r.p) ? r.p : '', t: einzeilig(r.t, 80), o: r.o === 1 });
+                  f: typeof r.f === 'string' && TAG.test(r.f) ? r.f : '', p: BELEG_PRUEFUNG.includes(r.p) ? r.p : '', t: einzeilig(r.t, 80), o: r.o === 1, w: r.w === 1 });
   }
   const arten = [...new Set(zeilen.map(z => z.a))];
   return { hinweis: einzeilig(b.hinweis, 240), betriebe, arten, zeilen, mehr: Number.isInteger(b.mehr) && b.mehr > 0 && b.mehr < 1e6 ? b.mehr : 0 };
+}
+
+// Die Artikel (Funktion „artikel“, A063): der Artikelstamm vom Laptop – nur Angaben, nur zum Ansehen. Streng geprüft und gekürzt, nur Text.
+// Je Zeile: n Artikelnummer, a Name, g Warengruppe, h Händlerpreis, e Endkundenpreis (Text mit Komma, leer = nicht belegt), v wo verkauft (Lexware, Automat, Kasse),
+// c Barcode, i Hinweise (Text). Was fehlt, bleibt leer – nichts wird ergänzt.
+export const ARTIKEL_MAX_ZEILEN = 600;
+export const ARTIKEL_VERKAUF = ['Lexware', 'Automat', 'Kasse'];
+export const ARTIKEL_PREIS_HINWEIS = 'Preis nicht über Händlerpreis';
+const ARTIKEL_PREIS = /^\d{1,6},\d{2}$/;
+export function artikelListe(b) {
+  if (!istObjekt(b)) return null;
+  const zeilen = [];
+  for (const r of (Array.isArray(b.zeilen) ? b.zeilen : []).slice(0, ARTIKEL_MAX_ZEILEN)) {
+    if (!istObjekt(r)) continue;
+    const n = einzeilig(r.n, 20), a = einzeilig(r.a, 120);
+    if (!n && !a) continue;
+    zeilen.push({ n, a, g: einzeilig(r.g, 40), h: typeof r.h === 'string' && ARTIKEL_PREIS.test(r.h) ? r.h : '', e: typeof r.e === 'string' && ARTIKEL_PREIS.test(r.e) ? r.e : '',
+                  v: ARTIKEL_VERKAUF.filter(x => Array.isArray(r.v) && r.v.includes(x)), c: typeof r.c === 'string' && /^\d{8,14}$/.test(r.c) ? r.c : '',
+                  i: (Array.isArray(r.i) ? r.i : []).filter(x => typeof x === 'string').slice(0, 4).map(x => einzeilig(x, 60)).filter(Boolean) });
+  }
+  const gruppen = [...new Set(zeilen.map(z => z.g).filter(Boolean))].sort((x, y) => x.localeCompare(y, 'de'));
+  const pruefen = zeilen.filter(z => z.i.includes(ARTIKEL_PREIS_HINWEIS)).length;
+  const gepr = typeof b.geprueft === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(b.geprueft) ? b.geprueft : '';
+  return { hinweis: einzeilig(b.hinweis, 240), gruppen, zeilen, pruefen, geprueft: gepr, mehr: Number.isInteger(b.mehr) && b.mehr > 0 && b.mehr < 1e6 ? b.mehr : 0 };
+}
+
+// Das Telefonbuch (Funktion „telefonbuch“, A059): Stellen und Leute vom Laptop – nur Angaben, nur zum Ansehen. Streng geprüft und gekürzt, nur Text.
+// Je Stelle: i Kennung (s-0001), n Name, a Art, t Telefon, e Mail, o Ort, l die Leute; je Person: i (p-0001), n Name, z Zuständigkeit, t Telefon, m Mobil, e Mail, x Notiz.
+// „ohne“ sind die Leute ohne Stelle. Herkunft und „unsicher“ gehen nie mit; was fehlt, bleibt leer – nichts wird ergänzt.
+export const TELEFONBUCH_MAX_PERSONEN = 400;
+export const TELEFONBUCH_MAX_STELLEN = 250;
+function telefonbuchPerson(r) {
+  if (!istObjekt(r) || typeof r.i !== 'string' || !/^p-\d{1,8}$/.test(r.i)) return null;
+  const n = einzeilig(r.n, 80);
+  if (!n) return null;
+  return { i: r.i, n, z: einzeilig(r.z, 100), t: einzeilig(r.t, 40), m: einzeilig(r.m, 40), e: einzeilig(r.e, 100), x: einzeilig(r.x, 120) };
+}
+export function telefonbuchListe(b) {
+  if (!istObjekt(b)) return null;
+  let personen = 0;
+  const stellen = [];
+  for (const s of (Array.isArray(b.stellen) ? b.stellen : []).slice(0, TELEFONBUCH_MAX_STELLEN)) {
+    if (!istObjekt(s) || typeof s.i !== 'string' || !/^s-\d{1,8}$/.test(s.i)) continue;
+    const n = einzeilig(s.n, 80);
+    if (!n) continue;
+    const l = [];
+    for (const r of Array.isArray(s.l) ? s.l : []) {
+      const p = telefonbuchPerson(r);
+      if (p && personen < TELEFONBUCH_MAX_PERSONEN) { l.push(p); personen++; }
+    }
+    stellen.push({ i: s.i, n, a: einzeilig(s.a, 30), t: einzeilig(s.t, 40), e: einzeilig(s.e, 100), o: einzeilig(s.o, 60), l });
+  }
+  const ohne = [];
+  for (const r of Array.isArray(b.ohne) ? b.ohne : []) {
+    const p = telefonbuchPerson(r);
+    if (p && personen < TELEFONBUCH_MAX_PERSONEN) { ohne.push(p); personen++; }
+  }
+  const stand = typeof b.stand === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(b.stand) ? b.stand : '';
+  return { hinweis: einzeilig(b.hinweis, 240), stellen, ohne, stand, mehr: Number.isInteger(b.mehr) && b.mehr > 0 && b.mehr < 1e6 ? b.mehr : 0 };
 }
 
 export function uebersichtKopf(k) {
@@ -428,8 +512,10 @@ export function uebersichtKopf(k) {
   if (profil && tabs.best) for (const z of tabs.best.tabelle.zeilen) if (z.d) { delete z.d.kontakt; delete z.d.notiz; }      // eine Station sieht nie Kontakt und Notiz einer Bestellung (der Laptop lässt beides schon weg)
   const hof = k.hof !== undefined ? hofListe(k.hof) : null;           // Gebäude-Infos (Funktion „hof“); fehlen sie, bleibt alles andere, wie es war
   const belege = !profil && k.belege !== undefined ? belegeListe(k.belege) : null;           // A053: nur im Stand für ein Verwalter-Handy
+  const artikel = !profil && k.artikel !== undefined ? artikelListe(k.artikel) : null;           // A063: nur im Stand für ein Verwalter-Handy
+  const telefonbuch = !profil && k.telefonbuch !== undefined ? telefonbuchListe(k.telefonbuch) : null;           // A059: nur im Stand für ein Verwalter-Handy
   const ergebnis = istObjekt(k.ergebnis) && typeof k.ergebnis.ok === 'boolean' && einzeilig(k.ergebnis.text, 200) ? { ok: k.ergebnis.ok, text: einzeilig(k.ergebnis.text, 200) } : null;      // das Ergebnis eines Auftrags (A037)
-  return { id, frage: typeof k.frage === 'string' && UUID.test(k.frage) ? k.frage : '', stand, gesendet: zeitText(k.gesendet), tabs, ...(hof ? { hof } : {}), ...(belege ? { belege } : {}), ...(ergebnis ? { ergebnis } : {}),
+  return { id, frage: typeof k.frage === 'string' && UUID.test(k.frage) ? k.frage : '', stand, gesendet: zeitText(k.gesendet), tabs, ...(hof ? { hof } : {}), ...(belege ? { belege } : {}), ...(artikel ? { artikel } : {}), ...(telefonbuch ? { telefonbuch } : {}), ...(ergebnis ? { ergebnis } : {}),
            ...(profil ? { profil } : {}) };
 }
 
@@ -471,7 +557,8 @@ export function stationsProfil(stand, instanz) {
   const standDanach = !!(u && u.kopf && g && u.gesehen > g.gesehen);                                    // kam nach dem Grund wieder ein Stand, gilt der Stand
   if (g && g.kopf && g.kopf.code === 'kein_profil' && !standDanach) return { reiter: [], handgriffe: [], satz: g.kopf.grund };
   if (!u || !u.kopf || !u.kopf.profil) return { reiter: [], handgriffe: [], satz: STATION_NICHTS };
-  return { reiter: [...u.kopf.profil.reiter], handgriffe: [...u.kopf.profil.handgriffe], satz: '' };
+  const pr = u.kopf.profil;
+  return { reiter: [...pr.reiter], handgriffe: [...pr.handgriffe], satz: '', ...(pr.tafeln ? { tafeln: pr.tafeln.map(t => ({ ...t })) } : {}), ...(pr.takt ? { takt: pr.takt } : {}) };
 }
 
 // Quittung zu einer Nachricht, die dieses Handy gesendet hat („Angekommen · gebucht: …“). Sie ist keine Karte in der Post, sondern steht im Verlauf
@@ -486,11 +573,17 @@ export function quittungKopf(k) {
 }
 const quittungAelter = (neu, alt) => spaeterAls(alt.gesendet, neu.gesendet) || (!spaeterAls(neu.gesendet, alt.gesendet) && neu.fassung < alt.fassung);
 
+// A051: Merker „Fenster ‚Das habe ich verstanden‘ ist für diese Fassung schon von selbst aufgegangen“. Fehlt er (alter Stand), gilt das Fenster als erledigt – alte Karten springen nicht plötzlich auf.
+function fensterMerk(x) {
+  return Number.isInteger(x.fenster) && x.fenster >= -1 && x.fenster < 1e9
+    ? { fenster: x.fenster, ...(x.fensterErinnert === true ? { fensterErinnert: true } : {}), ...(typeof x.fensterHash === 'string' ? { fensterHash: x.fensterHash.slice(0, 20) } : {}) } : {};
+}
+
 function normQuittung(key, q) {
   if (!istObjekt(q) || (q.instanz !== ECHT && q.instanz !== TEST)) return null;
   const kopf = quittungKopf({ ...q.kopf, art: 'fuer_dich', ding: 'quittung' });
   if (!kopf || key !== schluesselVon(q.instanz, kopf.bezug)) return null;
-  return { instanz: q.instanz, bezug: kopf.bezug, kopf, gesehen: Number.isFinite(q.gesehen) ? q.gesehen : Date.now() };
+  return { instanz: q.instanz, bezug: kopf.bezug, kopf, gesehen: Number.isFinite(q.gesehen) ? q.gesehen : Date.now(), ...fensterMerk(q) };
 }
 
 // Die Karte „Bestätigen?“ zu einer Nachricht (Funktion „bestaetigung“): die erkannten Werte in festen Feldern und zwei Knöpfe. Sie steht im Verlauf unter der Nachricht (bezug).
@@ -514,8 +607,14 @@ export function bestaetigungKopf(k) {
   if (!karten.length) return null;
   const satz = einzeilig(k.satz, 240);
   if (k.stand !== 'offen' && !satz) return null;
+  // A051: neue Felder des Laptops – nur übernommen, wenn sie da sind (vor_buchen: wartet auf „Stimmt“; erinnert: einmal nach einem Tag erinnert; ueberschrift: fester Kopfsatz des Fensters)
+  const mehr = {};
+  if (k.vor_buchen === true) mehr.vor_buchen = true;
+  if (k.erinnert === true) mehr.erinnert = true;
+  const ue = einzeilig(k.ueberschrift, 60);
+  if (ue) mehr.ueberschrift = ue;
   return { id, bezug, stand: k.stand, karten, satz, hash: einzeilig(k.hash, 20), fassung: Number.isInteger(k.fassung) && k.fassung >= 0 && k.fassung < 1e9 ? k.fassung : 0,
-           erstellt: text(k.erstellt, 40), gesendet: zeitText(k.gesendet) };
+           erstellt: text(k.erstellt, 40), gesendet: zeitText(k.gesendet), ...mehr };
 }
 const bestaetigungAelter = (neu, alt) => spaeterAls(alt.gesendet, neu.gesendet) || (!spaeterAls(neu.gesendet, alt.gesendet) && neu.fassung < alt.fassung);
 
@@ -523,7 +622,7 @@ function normBestaetigung(key, b) {
   if (!istObjekt(b) || (b.instanz !== ECHT && b.instanz !== TEST)) return null;
   const kopf = bestaetigungKopf({ ...b.kopf, art: 'fuer_dich', ding: 'bestaetigung' });
   if (!kopf || key !== schluesselVon(b.instanz, kopf.bezug)) return null;
-  const aus = { instanz: b.instanz, bezug: kopf.bezug, kopf, gesehen: Number.isFinite(b.gesehen) ? b.gesehen : Date.now(), neu: b.neu === true };
+  const aus = { instanz: b.instanz, bezug: kopf.bezug, kopf, gesehen: Number.isFinite(b.gesehen) ? b.gesehen : Date.now(), neu: b.neu === true, ...fensterMerk(b) };
   if (istObjekt(b.meine) && KARTEN_WAHLEN.includes(b.meine.wahl) && b.meine.fassung === kopf.fassung && typeof b.meine.id === 'string') {
     aus.meine = { id: b.meine.id, wahl: b.meine.wahl, fassung: b.meine.fassung, am: Number.isFinite(b.meine.am) ? b.meine.am : Date.now() };
   }
@@ -534,7 +633,8 @@ function normDing(key, d) {
   if (!istObjekt(d) || (d.instanz !== ECHT && d.instanz !== TEST)) return null;
   const kopf = dingKopf({ ...d.kopf, art: 'fuer_dich' });
   if (!kopf || key !== schluesselVon(d.instanz, kopf.id)) return null;
-  return { instanz: d.instanz, id: kopf.id, kopf, gesehen: Number.isFinite(d.gesehen) ? d.gesehen : Date.now() };
+  const meine = istObjekt(d.meine) && Number.isInteger(d.meine.fassung) ? { fassung: d.meine.fassung, am: Number.isFinite(d.meine.am) ? d.meine.am : Date.now() } : null;
+  return { instanz: d.instanz, id: kopf.id, kopf, gesehen: Number.isFinite(d.gesehen) ? d.gesehen : Date.now(), ...(meine ? { meine } : {}) };
 }
 
 function normFrage(key, f) {
@@ -590,6 +690,7 @@ export function normStand(roh) {
       if (g && Object.keys(aus.quittungen).length < MAX_QUITTUNGEN) aus.quittungen[k] = g;
     }
   }
+  mitteilungNormieren(roh, aus);                                   // der öffentliche Schlüssel des Laptops für Mitteilungen (A064 Stufe 2)
   if (istObjekt(roh.bestaetigungen)) {
     for (const [k, b] of Object.entries(roh.bestaetigungen)) {
       const g = normBestaetigung(k, b);
@@ -625,6 +726,7 @@ export function anwenden(stand, instanz, rohKopf, jetzt = Date.now()) {
     stand.fragen[key] = neu;
     return f && f.kopf ? 'geaendert' : 'neu';
   }
+  if (istObjekt(rohKopf) && rohKopf.art === 'mitteilung_schluessel') return mitteilungAnwenden(stand, instanz, rohKopf, jetzt);     // A064 Stufe 2
   if (istObjekt(rohKopf) && rohKopf.art === 'uebersicht') {
     const u = uebersichtKopf(rohKopf);
     if (!u) return 'ungueltig';
@@ -649,7 +751,7 @@ export function anwenden(stand, instanz, rohKopf, jetzt = Date.now()) {
     const alt = stand.quittungen[key];
     if (alt && alt.kopf && quittungAelter(q, alt.kopf)) return 'alt';                                          // eine ältere Fassung nach einer neueren
     if (!alt && Object.keys(stand.quittungen).length >= MAX_QUITTUNGEN) return 'ungueltig';
-    stand.quittungen[key] = { instanz, bezug: q.bezug, kopf: q, gesehen: jetzt };
+    stand.quittungen[key] = { instanz, bezug: q.bezug, kopf: q, gesehen: jetzt, ...(alt ? fensterMerk(alt) : { fenster: -1 }) };
     return 'quittung';
   }
   if (istObjekt(rohKopf) && rohKopf.art === 'fuer_dich' && rohKopf.ding === 'bestaetigung') {
@@ -662,7 +764,7 @@ export function anwenden(stand, instanz, rohKopf, jetzt = Date.now()) {
     if (!alt && Object.keys(stand.bestaetigungen).length >= MAX_BESTAETIGUNGEN) return 'ungueltig';
     // Eine Antwort dieses Handys bleibt nur für genau die Fassung vermerkt, auf die sie sich bezog (und sie ist vermerkt, bis der Laptop meldet, was er getan hat)
     const meine = alt && alt.meine && alt.kopf && alt.kopf.hash === b.hash && b.stand === 'offen' ? alt.meine : undefined;
-    stand.bestaetigungen[key] = { instanz, bezug: b.bezug, kopf: b, gesehen: alt ? alt.gesehen : jetzt, neu: !alt || alt.kopf.stand !== b.stand || alt.neu === true, ...(meine ? { meine } : {}) };
+    stand.bestaetigungen[key] = { instanz, bezug: b.bezug, kopf: b, gesehen: alt ? alt.gesehen : jetzt, neu: !alt || alt.kopf.stand !== b.stand || alt.neu === true, ...(alt ? fensterMerk(alt) : { fenster: -1 }), ...(meine ? { meine } : {}) };
     return 'bestaetigung';
   }
   if (istObjekt(rohKopf) && rohKopf.art === 'fuer_dich') {
@@ -716,6 +818,24 @@ export function quittungFuer(stand, instanz, nachricht) {
 export function bestaetigungFuer(stand, instanz, nachricht) {
   const b = stand && istObjekt(stand.bestaetigungen) ? stand.bestaetigungen[schluesselVon(instanz, nachricht)] : null;
   return b && b.kopf ? b : null;
+}
+
+// A051: Soll das Fenster „Das habe ich verstanden“ jetzt von selbst aufgehen? Nur für eine offene Karte ohne eigene Antwort, und jede Fassung höchstens einmal
+// (eine Erinnerung – `erinnert` – öffnet es noch einmal; dieselben Werte noch einmal geschrieben öffnen es nicht). Ohne Merker (alter Stand) nie.
+export function fensterFaellig(eintrag) {
+  if (!eintrag || !eintrag.kopf || eintrag.kopf.stand !== 'offen' || eintrag.meine || !Number.isInteger(eintrag.fenster)) return false;
+  if (eintrag.fenster < 0) return true;                                                  // noch nie aufgegangen
+  if (eintrag.kopf.erinnert === true && eintrag.fensterErinnert !== true) return true;    // die Erinnerung: noch einmal
+  return eintrag.kopf.fassung > eintrag.fenster && eintrag.fensterHash !== eintrag.kopf.hash;   // neue Werte: neue Fassung
+}
+export function fensterMerken(eintrag) {
+  eintrag.fenster = eintrag.kopf.fassung;
+  eintrag.fensterHash = eintrag.kopf.hash;
+  if (eintrag.kopf.erinnert === true) eintrag.fensterErinnert = true;
+}
+// Dasselbe für eine Quittung (ohne Karte zur selben Nachricht): einmal je Fassung, nur mit Merker.
+export function quittungFensterFaellig(eintrag) {
+  return !!eintrag && !!eintrag.kopf && Number.isInteger(eintrag.fenster) && eintrag.kopf.fassung > eintrag.fenster;
 }
 
 // Aufräumen: Erledigtes nach 14 Tagen, Hinweise ohne Rückfrage nach 14 Tagen, gemerkte Umschläge und „Für dich“ nach 30 Tagen.
@@ -837,6 +957,20 @@ export async function belegOriginalFrageBauen({ beleg, instanz, geraet, config, 
   return { id: kopf.id, umschlag: await verschluesseln(await beglaubigen(klar, mac), laptop), instanz };
 }
 
+// ---- Betrieb zuordnen (Funktion „belege“, N4) ----------------------------------------------------------------------------------------
+// Bei einem Beleg ohne Betrieb: eine kleine beglaubigte Bitte (Art „beleg_betrieb_auftrag“: nur die Kennung des Belegs und die Kennung des Betriebs). Das Handy schreibt nie selbst;
+// der Laptop prüft (nur Verwalter-Handys) und legt den Auftrag für das Werkzeug „dokumente“ an. Als Antwort kommt ein kurzer Satz (Art „uebersicht_grund“, Kennung der Bitte).
+export async function belegBetriebAuftragBauen({ beleg, betrieb, instanz, geraet, config, privatKey, jetzt = new Date() }) {
+  if (typeof beleg !== 'string' || !BELEG_ID.test(beleg) || typeof betrieb !== 'string' || !BELEG_ID.test(betrieb)) throw new Error('Beleg oder Betrieb gibt es nicht');
+  instanz = normModus(instanz);
+  const laptop = schluesselFuer(config, instanz);
+  if (!laptop) throw new Error('kein Schlüssel');
+  const kopf = { art: 'beleg_betrieb_auftrag', id: crypto.randomUUID(), beleg, betrieb, ziel: instanz, von: geraet.name, geraet: geraet.id, erstellt: jetzt.toISOString() };
+  const mac = await macSchluessel(privatKey, laptop, H2L);
+  const klar = await packen(kopf, []);
+  return { id: kopf.id, umschlag: await verschluesseln(await beglaubigen(klar, mac), laptop), instanz };
+}
+
 // ---- Die Hof-Karte am Handy bearbeiten (Funktion „hofkarte_bearbeiten“, A037) ------------------------------------------------------
 // Eine kleine beglaubigte Nachricht (Art „karte_auftrag“: eine Aktion und ein paar Angaben). Das Handy schreibt nie selbst; der Laptop prüft, führt aus und schickt
 // den neuen Stand mit dem Ergebnis zurück (Antwort mit `frage` = Kennung des Auftrags). Sie geht NICHT durch die Warteschlange (ein Auftrag von gestern soll nicht später
@@ -867,6 +1001,21 @@ export async function bestaetigungAntwortBauen({ eintrag, wahl, geraet, config, 
   const mac = await macSchluessel(privatKey, laptop, H2L);
   const klar = await packen(kopf, []);
   return { id: kopf.id, umschlag: await verschluesseln(await beglaubigen(klar, mac), laptop), instanz, meine: { id: kopf.id, wahl, fassung: k.fassung, am: jetzt.getTime() } };
+}
+
+// ---- „Geschickt“ zur Karte „Nachricht an Kunden“ (Funktion „kundennachricht“, A025) -----------------------------------------------------
+// Eine kleine beglaubigte Meldung (Art „nachricht_geschickt“: Bestellung, Anlass, Fassung – nie der Text). Das Handy schickt dem Kunden nichts; es sagt dem Laptop nur, dass
+// Niklas den Text selbst verschickt hat. Der Laptop prüft und trägt den Vermerk „Nachricht geschickt“ in die Bestellung ein. Sie geht durch die Warteschlange (klappt auch ohne Netz).
+export async function nachrichtGeschicktBauen({ eintrag, geraet, config, privatKey, jetzt = new Date() }) {
+  const instanz = normModus(eintrag.instanz);
+  const laptop = schluesselFuer(config, instanz);
+  if (!laptop) throw new Error('kein Schlüssel');
+  const n = eintrag.kopf && eintrag.kopf.ding === 'nachricht' ? eintrag.kopf.nachricht : null;
+  if (!n || n.geschickt || (eintrag.meine && eintrag.meine.fassung === n.fassung)) throw new Error('schon gemeldet');
+  const kopf = { art: 'nachricht_geschickt', id: crypto.randomUUID(), bestellung: n.bestellung, anlass: n.anlass, fassung: n.fassung, ziel: instanz, von: geraet.name, geraet: geraet.id, erstellt: jetzt.toISOString() };
+  const mac = await macSchluessel(privatKey, laptop, H2L);
+  const klar = await packen(kopf, []);
+  return { id: kopf.id, umschlag: await verschluesseln(await beglaubigen(klar, mac), laptop), instanz, meine: { fassung: n.fassung, am: jetzt.getTime() } };
 }
 
 // ---- Dieses Handy für Anmelde-Freigaben einrichten (Funktion „anmelde_freigabe“, A064) ----------------------------------------------

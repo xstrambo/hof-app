@@ -10,6 +10,7 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="stylesheet" href="styles.css">
 <link rel="stylesheet" href="landkarte.css">
+<link rel="stylesheet" href="tafeln.css">
 <script src="js/landkarte.js" defer></script>
 <script type="module" src="app.js"></script>
 </head>
@@ -87,6 +88,7 @@
   <div class="liste-bereich">
     <span class="ueberschrift">Zuletzt gesendet</span>
     <p class="verlauf-hinweis" id="hinweis-start" hidden></p>
+    <p class="ws-hinweis" id="ws-hinweis" data-funktion="offline" role="status" hidden></p>
     <div class="liste verlauf" id="liste-start"></div>
   </div>
   <div class="mitte">
@@ -233,6 +235,13 @@
       <p class="klein anmelde-stand" id="anmelde-stand" role="status" hidden></p>
       <div class="anmelde-aktion"><button type="button" class="knopf haupt" id="b-anmelde-einrichten">Dieses Handy einrichten</button></div>
       <p class="klein anmelde-fehler" id="anmelde-fehler" role="status" hidden></p>
+      <!-- Mitteilung aufs Handy (A064 Stufe 2, Funktion anmelde_mitteilung): auch bei geschlossener App; js/mitteilung-ansicht.js -->
+      <div class="mitteilung-block" id="mitteilung-block" data-funktion="anmelde_mitteilung" hidden>
+        <p class="leise klein">Mitteilung aufs Handy, wenn eine Anmeldung bestätigt werden soll – auch wenn die App zu ist.</p>
+        <p class="klein anmelde-stand" id="mitteilung-stand" role="status" hidden></p>
+        <div class="anmelde-aktion"><button type="button" class="knopf neben" id="b-mitteilung">Mitteilungen einschalten</button></div>
+        <p class="klein anmelde-fehler" id="mitteilung-fehler" role="status" hidden></p>
+      </div>
     </div>
     <span class="ueberschrift">Dürfen senden</span>
     <div class="liste" id="mitglieder"></div>
@@ -247,6 +256,7 @@
     <button type="button" class="ue-akt" id="b-ue-neu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg><span>Aktualisieren</span></button>
   </div>
   <div class="ue-inhalt">
+    <button type="button" class="ue-akt" id="b-ue-ansicht" aria-label="Ansicht einrichten: Tafeln wählen, Größe und Reihenfolge" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="5" rx="1"/><rect x="13" y="11" width="8" height="10" rx="1"/><rect x="3" y="14" width="8" height="7" rx="1"/></svg><span>Ansicht</span></button>
     <p class="ue-stand leise klein" id="ue-stand" role="status" aria-live="polite"></p>
     <!-- Station (A055): je erlaubtem Handgriff ein großer Knopf – nur auf einem Gerät mit der Rolle „station“, nur was sein Profil nennt -->
     <div class="st-griffe" id="st-griffe" hidden>
@@ -300,6 +310,8 @@
     <button type="button" class="knopf-icon" id="b-post-neu" aria-label="Aktualisieren"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg></button>
   </div>
   <div class="post-inhalt">
+    <!-- A031 (Funktion „vorlesen“): neue Rückfragen automatisch vorlesen – Standard aus; die Zeile steht nur, wenn das Handy vorlesen kann -->
+    <label class="vorlesen-zeile" id="vorlesen-zeile" data-funktion="vorlesen" hidden><input type="checkbox" id="vorlesen-auto"><span>Rückfragen automatisch vorlesen</span></label>
     <div id="post-hinweise"></div>
     <span class="ueberschrift">Offen</span>
     <div class="liste" id="post-offen"></div>
@@ -395,6 +407,12 @@
     </div>
     <button type="button" class="knopf neben" id="b-fab-abbrechen">Abbrechen</button>
   </div>
+</div>
+
+<!-- A051: Fenster „Das habe ich verstanden“ (Funktion „verstanden“): geht nach dem Senden auf, wenn der Laptop eine Karte schickt -->
+<div class="fenster-huelle" id="fenster" data-funktion="verstanden" hidden>
+  <button type="button" class="fenster-hinter" id="b-fenster-zu" aria-label="Später"></button>
+  <div class="fenster" role="dialog" aria-modal="true" aria-labelledby="fenster-titel"></div>
 </div>
 
 <div class="meldung" id="meldung" role="status" hidden></div>
