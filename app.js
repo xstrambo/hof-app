@@ -160,9 +160,17 @@ async function starten() {
   setzeName();
   if (geraet.status !== 'frei') return wartenAuf();
   if (istStation()) await flaggen.catch(() => {});          // Station: ihr Anfang ist die Übersicht, und die hängt an einer Funktion – erst zeigen, wenn funktionen.json gelesen ist
-  history.replaceState({ s: 's-start' }, '');
-  zeige('s-start', { verlauf: false });                     // (eine Station kommt von hier zur Übersicht, siehe stationZiel)
+  // N10 (20.11.2026, Niklas: „Wenn ich die Post aktualisiere, … werde ich eine Seite zurückgeworfen“): Wird die Seite in der Post neu geladen (Herunterziehen im Browser,
+  // Neuladen, neue Fassung der App), bleibt man in der Post – an derselben Stelle. Der Browser behält beim Neuladen den Eintrag im Verlauf samt Merker (Bildschirm, Scrollstelle).
+  const vorher = history.state;
+  try { history.scrollRestoration = 'manual'; } catch { /* alte Browser: dann springt er eben selbst */ }      // die Scrollstelle setzt die App selbst (nur in der Post), sonst springt der Browser dazwischen
+  const zurPost = !!vorher && vorher.s === 's-post' && !vorher.blatt && !ANZEIGE && q.get('post') !== '1';
+  if (zurPost) await flaggen.catch(() => {});                // die Post hängt an einer Funktion: erst prüfen, wenn funktionen.json gelesen ist
+  const inPost = zurPost && postAktiv() && !stationFrei();
+  history.replaceState(inPost ? { s: 's-post', y: Number(vorher.y) || 0 } : { s: 's-start' }, '');
+  zeige(inPost ? 's-post' : 's-start', { verlauf: false }); // (eine Station kommt von hier zur Übersicht, siehe stationZiel)
   hintergrund();
+  if (inPost) { postStelleZurueck(Number(vorher.y) || 0); return; }
   if (ANZEIGE) return;
   if (q.get('post') === '1') { const u = new URL(location.href); u.searchParams.delete('post'); history.replaceState({ s: 's-start' }, '', u.search || location.pathname); await flaggen.catch(() => {}); mitteilungGeklickt(); return; }      // aus einer angetippten Mitteilung (sw.js): gleich zur Post, wo die Karte „Anmeldung“ steht
   // Angefangener Entwurf? Dann gleich dort weitermachen.
@@ -635,6 +643,7 @@ async function zeichneListen() {
   const heute = new Date(); heute.setHours(0, 0, 0, 0);
   const jetzt = modus;                                                           // erst nach dem Warten lesen: der Schalter kann unterdessen umgelegt worden sein
   verlaufZeigen($('#liste-start'), $('#hinweis-start'), alle, jetzt);
+  verlaufBegrenzen();
   verlaufZeigen($('#liste-gesendet'), $('#hinweis-gesendet'), alle.filter(n => n.erstellt >= heute.getTime() || n.status === 'wartet'), jetzt);
 }
 
@@ -673,10 +682,43 @@ function fuelle(box, liste) {
     if (lese && !leseKurz) { e.classList.add('mit-hinweiszeile'); e.appendChild(lese); }                // dieselbe Zeile unter der Nachricht wie die Quittung (umbrechen, auf kleinen Handys eine Zeile)
     const karte = karteZeile(n, ziel);
     if (karte) { e.classList.add('mit-karte'); e.appendChild(karte); }
+    if (karte && box.id === 'liste-start' && karte.dataset.stand !== 'offen') karteKurz(karte);
     box.appendChild(e);
   }
   funktionenAnwenden(box, funktionen, modus);                              // die Quittung trägt data-funktion: im Test als „noch nicht freigegeben“ markiert
 }
+// N10 (20.11.2026, Niklas: „Das sieht ein bisschen komisch abgeschnitten aus.“): Über dem Mikrofon ist wenig Platz. Eine erledigte Karte („Bestätigt“, „Falsch gemeldet“)
+// zeigt dort nur ihre Kopfzeile; „mehr“ klappt Felder und Satz auf (dann lässt sich der Verlauf scrollen, wie bei einer offenen Karte), „weniger“ wieder zu.
+// Passt der neueste Eintrag trotzdem nicht ganz hinein (sehr kurzer Bildschirm), endet der Verlauf sanft ausgeblendet statt mitten in einer Zeile – Antippen öffnet die Liste.
+const karteAuf = new Set();
+function karteKurz(karte) {
+  const id = karte.dataset.karte;
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'karte-mehr';
+  const setze = auf => { karte.classList.toggle('auf', auf); b.textContent = auf ? 'weniger' : 'mehr'; b.setAttribute('aria-expanded', String(auf)); };
+  karte.classList.add('kurz');
+  setze(karteAuf.has(id));
+  b.addEventListener('click', ev => {
+    ev.stopPropagation();
+    const auf = !karteAuf.has(id);
+    if (auf) karteAuf.add(id); else karteAuf.delete(id);
+    setze(auf);
+    verlaufBegrenzen();
+  });
+  (karte.querySelector('.karte-kopf') || karte).appendChild(b);
+}
+function verlaufBegrenzen() {
+  const v = $('#liste-start');
+  if (!v) return;
+  const erste = v.querySelector('.eintrag');
+  const rollt = getComputedStyle(v).overflowY === 'auto';                 // offene oder aufgeklappte Karte: der Verlauf lässt sich scrollen, nichts ist abgeschnitten
+  v.classList.toggle('ueberlang', !!erste && !rollt && erste.offsetHeight > v.clientHeight + 1);
+}
+if (typeof ResizeObserver === 'function') new ResizeObserver(() => verlaufBegrenzen()).observe($('#liste-start'));
+$('#liste-start').addEventListener('click', ev => {
+  if (!$('#liste-start').classList.contains('ueberlang') || ev.target.closest('button')) return;
+  zeige('s-gesendet');                                                    // dort steht jeder Eintrag ganz
+});
 // Unter der gesendeten Nachricht: was der Laptop daraus gemacht hat („Angekommen · gebucht: Wareneingang“). Nur auf Verwalter-Handys, nur wenn die
 // Funktion „quittung“ gilt, nur wenn eine Quittung für genau diese Nachricht (und dieses Ziel) da ist. Der Satz kommt vom Laptop und steht nur als Text da.
 function quittungZeile(n, ziel) {
@@ -1035,7 +1077,22 @@ async function postZeichnen(erzwingen = false) {
     postErledigte(postStand, modus).map(f => [f.instanz, f.id, f.zustand, f.erledigt.antwort, f.erledigt.gesehen, f.meine && f.meine.id])]);
   if (!erzwingen && signatur === postZeichnung) { $('#post-stand').textContent = ctx.zuletzt; return; }
   postZeichnung = signatur;
+  const y = window.scrollY;
   zeichnePost($('#s-post'), ctx);
+  if (aktuell === 's-post' && Math.abs(window.scrollY - y) > 1) window.scrollTo(0, y);      // N10: neu gezeichnet (Aktualisieren, neue Fragen): man bleibt, wo man war
+}
+// N10: Die Scrollstelle der Post steht im Merker des Verlaufs (bleibt beim Neuladen erhalten). Nach dem Neuladen geht es dorthin zurück, sobald die Post gezeichnet ist.
+let postScrollTimer;
+function postStelleMerken() {
+  clearTimeout(postScrollTimer);
+  const st = history.state;
+  if (aktuell === 's-post' && st && st.s === 's-post' && !st.blatt && st.y !== Math.round(window.scrollY)) history.replaceState({ ...st, y: Math.round(window.scrollY) }, '');
+}
+addEventListener('scroll', () => { if (aktuell === 's-post') { clearTimeout(postScrollTimer); postScrollTimer = setTimeout(postStelleMerken, 150); } }, { passive: true });
+addEventListener('pagehide', postStelleMerken);
+function postStelleZurueck(y) {
+  if (!(y > 0)) return;
+  postZeichnen(true).then(() => requestAnimationFrame(() => { if (aktuell === 's-post') window.scrollTo(0, y); }));
 }
 
 // „Für dich“: das PDF öffnen oder den Eintrag mit „Erledigt“ wegräumen (auch das PDF auf dem Handy). Auf dem Laptop bleibt alles, wie es ist.

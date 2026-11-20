@@ -11,7 +11,7 @@ export const FUNKTION = 'sprache_cloud';        // Name in funktionen.json: erst
 export const MAX_SEKUNDEN = 180;                // eine Aufnahme dauert höchstens 3 Minuten (danach beendet die App sie selbst)
 
 // Nach einem Ausfall der Cloud-Erkennung nimmt die App eine Weile wieder den Live-Text des Handys (Minuten); dann versucht sie es erneut.
-const PAUSE_MINUTEN = { nicht_eingerichtet: 30, grenze: 30, dienst: 5, server: 5, zeit: 2, bremse: 1 };
+const PAUSE_MINUTEN = { nicht_eingerichtet: 30, abrechnung: 30, grenze: 30, dienst: 5, server: 5, zeit: 2, bremse: 1 };
 export function pauseMs(code) { return (PAUSE_MINUTEN[code] || 0) * 60 * 1000; }
 
 // Was tun nach dem Fehler? „nochmal“ = ein erneuter Versuch lohnt sich, sonst gibt es den Knopf nicht.
@@ -22,6 +22,7 @@ const ABSCHREIBEN = ' – der Laptop schreibt die Aufnahme ab.';
 export const HINWEISE = {
   netz: 'Kein Netz' + ABSCHREIBEN,
   nicht_eingerichtet: 'Spracherkennung noch nicht eingerichtet' + ABSCHREIBEN,
+  abrechnung: 'Die Spracherkennung ist bei Mistral nicht freigeschaltet (Abrechnung)' + ABSCHREIBEN,     // Mistral antwortet 402: die Bezahlung ist dort nicht freigeschaltet (nicht die Aufnahme ist schuld)
   grenze: 'Monatsgrenze erreicht' + ABSCHREIBEN,
   zu_lang: 'Die Aufnahme ist länger als 3 Minuten' + ABSCHREIBEN,
   bremse: 'Zu viele Aufnahmen kurz hintereinander' + ABSCHREIBEN,

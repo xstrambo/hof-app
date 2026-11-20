@@ -224,6 +224,20 @@ function sprachKnopf(feld, kopf, vo, abh) {
   feld.append(b, status);
 }
 
+// N10: welche „Die ganze Nachricht“ zugeklappt ist – nur für diese Sitzung des Browsers (sessionStorage; ohne Speicher eben nur bis zum Neuladen)
+const ZU_NAME = 'hof-post-zu';
+let zuMenge = null;
+function nachrichtZu() {
+  if (!zuMenge) { zuMenge = new Set(); try { for (const k of JSON.parse(sessionStorage.getItem(ZU_NAME) || '[]')) if (typeof k === 'string') zuMenge.add(k); } catch { /* ohne Speicher */ } }
+  return zuMenge;
+}
+function nachrichtZuSetzen(key, zu) {
+  const m = nachrichtZu();
+  if (zu === m.has(key)) return;
+  if (zu) m.add(key); else m.delete(key);
+  try { sessionStorage.setItem(ZU_NAME, JSON.stringify([...m].slice(-50))); } catch { /* ohne Speicher */ }
+}
+
 function frageKarte(f, ctx) {
   const k = f.kopf;
   if (k.frage_art === 'anmeldung' && k.anmeldung) return anmeldeKarte(f, ctx);
@@ -242,6 +256,8 @@ function frageKarte(f, ctx) {
   if (k.nachricht) {                                                 // die ganze Nachricht, auf die sich die Frage bezieht (nur Text, aufgeklappt)
     const box = el('details', 'nachricht');
     box.open = true;
+    if (nachrichtZu().has(key)) box.open = false;                    // N10: wer „Die ganze Nachricht“ zugeklappt hat, findet sie nach dem Aktualisieren und Neuladen wieder zu
+    box.addEventListener('toggle', () => nachrichtZuSetzen(key, !box.open));
     box.appendChild(el('summary', null, 'Die ganze Nachricht'));
     if (k.nachricht.text) box.appendChild(el('p', 'nachricht-text', k.nachricht.text));
     if (k.nachricht.positionen && k.nachricht.positionen.length) {

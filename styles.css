@@ -160,6 +160,15 @@ body.mit-scan #s-start{--fest:352px}                              /* der Knopf �
 #s-start:has(#liste-start .eintrag-karte[data-stand="offen"]) .verlauf{flex-flow:column nowrap;overflow-y:auto;overscroll-behavior:contain}   /* …und auf kleinen Handys läuft der Verlauf von oben nach unten und lässt sich scrollen, damit man die Knöpfe immer erreicht */                                   /* wartet eine Karte auf „Stimmt“ oder „Falsch“, bekommt der Verlauf mehr Platz: nur das Mikrofon wird kleiner (und nur, solange die Karte offen ist) */
 .eintrag-karte{flex:0 0 100%;min-width:0;border-top:1px solid var(--linie);padding-top:8px;display:flex;flex-direction:column;gap:6px;font-size:16px;line-height:1.3}
 .eintrag-karte .karte-frage{font-size:17px}
+/* N10: auf dem Start steht eine erledigte Karte nur mit ihrer Kopfzeile („Bestätigt“ … „mehr“); aufgeklappt bekommt der Verlauf Platz und lässt sich scrollen */
+.eintrag-karte .karte-kopf{display:flex;align-items:center;gap:10px;min-width:0}
+#liste-start .eintrag-karte.kurz{padding-top:5px;gap:4px}
+#liste-start .eintrag-karte.kurz:not(.auf)>:not(.karte-kopf){display:none}
+.karte-mehr{position:relative;margin-left:auto;flex:none;min-height:30px;padding:0 14px;border-radius:8px;border:1px solid var(--rahmen);background:var(--flaeche2);color:var(--text);font-size:15px;font-weight:700;line-height:1}
+.karte-mehr::after{content:"";position:absolute;inset:-8px -4px}                          /* gut zu treffen, ohne dass die Zeile höher wird */
+#s-start:has(#liste-start .eintrag-karte.auf){--ruhe:440px}
+#s-start:has(#liste-start .eintrag-karte.auf) .verlauf{flex-flow:column nowrap;overflow-y:auto;overscroll-behavior:contain}
+#s-start .verlauf.ueberlang{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 34px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 34px),transparent);cursor:pointer}   /* passt der neueste Eintrag nicht ganz: sanft ausblenden statt mitten in der Zeile abschneiden */
 .eintrag-karte[data-stand="offen"] .karte-frage{color:var(--orange)}
 .eintrag-karte[data-stand="stimmt"] .karte-frage{color:var(--gruen-t)}
 .eintrag-karte[data-stand="falsch"] .karte-frage{color:var(--rot-t)}
@@ -325,6 +334,7 @@ body.mit-scan #s-start{--fest:352px}                              /* der Knopf �
 .post-zaehler{min-width:28px;height:28px;padding:0 8px;border-radius:14px;background:var(--warn-rahmen);color:var(--tinte);font-weight:700;font-size:16px;display:flex;align-items:center;justify-content:center;flex:none}
 .ist-test .post-zaehler{background:var(--test);color:var(--test-dunkel)}
 .post-inhalt{padding:4px 16px 26px;display:flex;flex-direction:column;gap:10px}
+#s-post .zurueck-kopf{position:sticky;top:0;z-index:5;background:var(--grund)}          /* N10: „Zurück“ und „Aktualisieren“ bleiben oben stehen – Aktualisieren geht von jeder Stelle aus, ohne hochzuscrollen */
 .post-inhalt .ueberschrift{padding-left:4px}
 .post-hinweis{overflow-wrap:anywhere;margin:0 0 4px;padding:10px 14px;border-radius:8px;background:var(--warn-grund);border:1px solid var(--warn-rahmen);color:var(--warn-text);font-size:15px;line-height:1.4}
 .post-hinweis.leise{background:var(--flaeche);border-color:var(--linie);color:var(--leise)}
