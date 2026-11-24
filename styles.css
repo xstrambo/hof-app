@@ -761,3 +761,41 @@ body.station .untere-leiste>*{flex:1 1 0;min-width:0}
 .tb-nur,.tb-notiz{font-size:15px;color:var(--leise)}
 .tb-ohne-kopf{margin:0;padding:12px 14px 6px;font-weight:700;color:var(--leise)}
 .tb-niemand{padding:8px 14px}
+/* N13: Wissen (Reiter der Übersicht) – Liste groß zum Antippen, Seite groß zum Lesen (dunkle Tafel, helle Schrift) */
+.wi-liste-seiten{display:flex;flex-direction:column}
+.wi-gruppe{display:flex;flex-direction:column;border-top:1px solid var(--linie)}
+.wi-gruppe:first-child{border-top:0}
+.wi-gruppe-titel{margin:0;padding:12px 14px 6px;font-size:15px;font-weight:700;color:var(--gruen-t);text-transform:uppercase;letter-spacing:.04em}
+.wi-eintrag{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:2px;width:100%;min-height:56px;padding:10px 14px;border:0;border-top:1px solid var(--linie);background:transparent;color:var(--text);text-align:left;font:inherit}
+.wi-gruppe-titel+.wi-eintrag{border-top:0}
+.wi-titel{font-size:18px;font-weight:700;overflow-wrap:anywhere}
+.wi-unter{font-size:14px;color:var(--leise)}
+.wi-nur-titel .wi-titel{font-weight:600}
+.wi-zurueck{display:flex;align-items:center;width:100%;min-height:52px;margin:0 0 10px;padding:0 16px;border-radius:8px;border:1.5px solid var(--gruen-licht);background:var(--flaeche);color:var(--hell);font-size:18px;font-weight:700;text-align:left}
+.wi-zurueck::before{content:"‹";font-size:26px;line-height:1;margin-right:10px}
+.wi-seite+.wi-zurueck{margin:10px 0 0}
+.wi-seite{--text:var(--hell);--leise:var(--hell-leise);color:var(--text);background:var(--flaeche);border:1px solid var(--linie);border-radius:8px;padding:6px 16px 14px;font-size:19px;line-height:1.55;overflow-wrap:anywhere}
+.wi-seite h1,.wi-seite h2,.wi-seite h3,.wi-seite h4{line-height:1.25;margin:16px 0 8px}
+.wi-seite h1{font-size:25px}
+.wi-seite h2{font-size:22px}
+.wi-seite h3,.wi-seite h4{font-size:20px}
+.wi-absatz{margin:10px 0}
+.wi-kopf{font-size:15px;color:var(--leise);margin-top:0}
+.wi-liste{margin:8px 0;padding-left:28px}
+.wi-liste li{margin:6px 0}
+.wi-liste li.wi-tief{margin-left:22px}
+.wi-frage,.wi-widerspruch{padding:8px 12px;border-radius:8px;border-left:5px solid var(--gelb);background:var(--flaeche2)}
+.wi-widerspruch{border-left-color:var(--rot)}
+li.wi-frage,li.wi-widerspruch,tr.wi-frage td,tr.wi-widerspruch td{background:var(--flaeche2)}
+.wi-verweis{color:var(--gruen-licht);text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:6px 0}
+.wi-extern{color:var(--text)}
+.wi-adresse{color:var(--leise);font-size:15px}
+.wi-code-kurz{font-family:Consolas,"Roboto Mono",monospace;font-size:.88em;background:var(--flaeche2);padding:1px 5px;border-radius:4px}
+.wi-code{font-family:Consolas,"Roboto Mono",monospace;font-size:15px;line-height:1.4;background:var(--flaeche2);padding:10px 12px;border-radius:6px;overflow-x:auto;white-space:pre}
+.wi-zitat{margin:10px 0;padding:6px 12px;border-left:4px solid var(--linie);color:var(--leise)}
+.wi-linie{border:0;border-top:1px solid var(--linie);margin:16px 0}
+.wi-tabelle{overflow-x:auto;margin:10px 0}
+.wi-tabelle table{border-collapse:collapse;font-size:16px;line-height:1.35}
+.wi-tabelle th,.wi-tabelle td{border:1px solid var(--linie);padding:6px 8px;text-align:left;vertical-align:top;min-width:70px}
+.wi-tabelle th{background:var(--flaeche2)}
+.wi-laptop{color:var(--leise)}

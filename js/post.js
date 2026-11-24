@@ -500,6 +500,51 @@ export function telefonbuchListe(b) {
   return { hinweis: einzeilig(b.hinweis, 240), stellen, ohne, stand, mehr: Number.isInteger(b.mehr) && b.mehr > 0 && b.mehr < 1e6 ? b.mehr : 0 };
 }
 
+// Das Wissen (Funktion „wissen“, N13): die Wiki-Seiten vom Laptop zum Nachlesen – Liste (Pfad, Titel, Gruppe, Stand) und der Text als Markdown. Streng geprüft:
+// nur Pfade aus erlaubten Zeichen (kein „..“, nur .md), Texte ohne Steuerzeichen und in der Länge begrenzt. Gezeigt wird später nur als Text (js/wissen-ansicht.js).
+// Ein Eintrag ohne Text („nur_titel“) steht nur mit Titel da – lesen am Laptop. Die Form ist dieselbe wie vom Laptop (zweimal prüfen ändert nichts).
+export const WISSEN_MAX_SEITEN = 1500;
+export const WISSEN_MAX_TEXT = 300000;                 // Zeichen je Seite (der Laptop schickt höchstens 250 KB Text für alle Seiten zusammen)
+const WISSEN_TEIL = /^[A-Za-z0-9][A-Za-z0-9._ ()-]{0,120}$/;
+export function wissenPfad(p) {
+  if (typeof p !== 'string' || !p || p.length > 300 || /[\\:\u0000]/.test(p) || p.startsWith('/')) return '';
+  const teile = p.split('/');
+  if (teile.some(x => x === '.' || x === '..' || !WISSEN_TEIL.test(x))) return '';
+  return /\.md$/i.test(teile[teile.length - 1]) ? teile.join('/') : '';
+}
+const WISSEN_STEUER = new RegExp('[' + [[0, 8], [11, 31], [127, 159], [8203, 8207], [8232, 8233], [8234, 8238], [8294, 8297], [65279, 65279]]
+  .map(([a, b]) => String.fromCharCode(a) + '-' + String.fromCharCode(b)).join('') + ']', 'g');      // Steuerzeichen und unsichtbare Richtungszeichen
+const wissenText = (x, n) => (typeof x === 'string' ? x.replace(/\r\n?/g, '\n').replace(/\t/g, '    ').replace(WISSEN_STEUER, '').slice(0, n) : '');
+const WISSEN_ZUSTAND = ['ok', 'fehlt', 'kaputt'];
+const zaehler = x => (Number.isInteger(x) && x > 0 && x < 1e6 ? x : 0);
+export function wissenListe(b) {
+  if (!istObjekt(b)) return null;
+  const zustand = WISSEN_ZUSTAND.includes(b.zustand) ? b.zustand : 'kaputt';
+  const seiten = [], schon = new Set();
+  for (const s of (Array.isArray(b.seiten) ? b.seiten : []).slice(0, WISSEN_MAX_SEITEN)) {
+    if (!istObjekt(s)) continue;
+    const pfad = wissenPfad(s.pfad);
+    const titel = einzeilig(s.titel, 160);
+    if (!pfad || !titel || schon.has(pfad)) continue;
+    schon.add(pfad);
+    const e = { pfad, titel, gruppe: einzeilig(s.gruppe, 60).toLowerCase(), stand: typeof s.stand === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s.stand) ? s.stand : '' };
+    const text = wissenText(s.text, WISSEN_MAX_TEXT);
+    if (typeof s.text === 'string') e.text = text; else e.nur_titel = true;
+    seiten.push(e);
+  }
+  const gruppen = [], bekannt = new Set();
+  for (const g of Array.isArray(b.gruppen) ? b.gruppen : []) {
+    if (!Array.isArray(g) || typeof g[0] !== 'string') continue;
+    const name = einzeilig(g[0], 60).toLowerCase(), titel = einzeilig(g[1], 60);
+    if (bekannt.has(name) || !titel) continue;
+    bekannt.add(name); gruppen.push([name, titel]);
+  }
+  for (const s of seiten) if (!bekannt.has(s.gruppe)) { bekannt.add(s.gruppe); gruppen.push([s.gruppe, s.gruppe ? s.gruppe[0].toUpperCase() + s.gruppe.slice(1) : 'Allgemein']); }
+  const benutzt = new Set(seiten.map(s => s.gruppe));
+  return { zustand, hinweis: einzeilig(b.hinweis, 240), gruppen: gruppen.filter(([g]) => benutzt.has(g)), seiten,
+           nur_titel: seiten.filter(s => s.nur_titel).length, mehr: zaehler(b.mehr), unlesbar: zaehler(b.unlesbar) };
+}
+
 export function uebersichtKopf(k) {
   if (!istObjekt(k) || k.art !== 'uebersicht' || k.version !== 1) return null;
   const id = typeof k.id === 'string' ? k.id : '';
@@ -514,8 +559,9 @@ export function uebersichtKopf(k) {
   const belege = !profil && k.belege !== undefined ? belegeListe(k.belege) : null;           // A053: nur im Stand für ein Verwalter-Handy
   const artikel = !profil && k.artikel !== undefined ? artikelListe(k.artikel) : null;           // A063: nur im Stand für ein Verwalter-Handy
   const telefonbuch = !profil && k.telefonbuch !== undefined ? telefonbuchListe(k.telefonbuch) : null;           // A059: nur im Stand für ein Verwalter-Handy
+  const wissen = !profil && k.wissen !== undefined ? wissenListe(k.wissen) : null;                               // N13: nur im Stand für ein Verwalter-Handy
   const ergebnis = istObjekt(k.ergebnis) && typeof k.ergebnis.ok === 'boolean' && einzeilig(k.ergebnis.text, 200) ? { ok: k.ergebnis.ok, text: einzeilig(k.ergebnis.text, 200) } : null;      // das Ergebnis eines Auftrags (A037)
-  return { id, frage: typeof k.frage === 'string' && UUID.test(k.frage) ? k.frage : '', stand, gesendet: zeitText(k.gesendet), tabs, ...(hof ? { hof } : {}), ...(belege ? { belege } : {}), ...(artikel ? { artikel } : {}), ...(telefonbuch ? { telefonbuch } : {}), ...(ergebnis ? { ergebnis } : {}),
+  return { id, frage: typeof k.frage === 'string' && UUID.test(k.frage) ? k.frage : '', stand, gesendet: zeitText(k.gesendet), tabs, ...(hof ? { hof } : {}), ...(belege ? { belege } : {}), ...(artikel ? { artikel } : {}), ...(telefonbuch ? { telefonbuch } : {}), ...(wissen ? { wissen } : {}), ...(ergebnis ? { ergebnis } : {}),
            ...(profil ? { profil } : {}) };
 }
 

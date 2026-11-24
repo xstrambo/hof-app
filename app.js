@@ -10,6 +10,7 @@ import { anmeldeBestaetigen, anmeldeHandyEinrichten } from './js/anmelden.js';
 import { baueMitteilung } from './js/mitteilung-ansicht.js';
 import { zeichneKarte, einblendungText, WAHL_TEXT, fuelleFensterKarte, fuelleFensterQuittung, HINWEIS_LESE, HINWEIS_SPAET, HINWEIS_WARTET } from './js/bestaetigung-ansicht.js';
 import { zeichneReiter, zeichneInhalt, standText } from './js/uebersicht.js';
+import { wissenSchliessen } from './js/wissen-ansicht.js';
 import { ARTEN as TAFEL_ARTEN, tafelnBereinigen, eigeneLaden, eigeneSpeichern, eigeneLoeschen, altSatz, zeichneTafeln, zeichneEditor, SATZ_KAPUTT } from './js/tafeln.js';
 import { zeichneAbgeholt, abgeholtText } from './js/abgeholt-ansicht.js';
 import { zeichneBestellung } from './js/bestellung-ansicht.js';
@@ -1351,6 +1352,8 @@ async function postAnmeldung(f, art) {
 // Der Laptop schickt den Stand nur auf Anfrage: „Aktualisieren“ sendet eine kleine beglaubigte Anfrage, der Laptop baut den Stand aus seinen Quellen und
 // schickt ihn zurück (meist nach wenigen Sekunden). Der zuletzt bekannte Stand bleibt im Handy und ist auch ohne Netz da. Es gibt keine ständige Abfrage.
 let ueReiter = 'lager';                // im Anzeige-Modus bleibt es dabei
+let ueWunschWissen = false;        // „Wissen“ aus dem Menü gewählt, die Seiten sind aber noch nicht da: sobald sie kommen, steht der Reiter offen
+let ueReiterZeigen = false;        // den gewählten Reiter in der Leiste ins Bild holen (er steht hinten)
 let ueSuche = '';
 let ueHofWahl = '';                // das angetippte Gebäude im Reiter „Hof“ (leer = die Kacheln)
 let ueStatus = '';                 // Satz zum letzten Fragen (leer = alles gut)
@@ -1461,6 +1464,8 @@ function uebersichtZeichnen() {
   const mitBelege = !sicht && belegeAktiv() && !!(kopf && kopf.belege);                          // A053: den Reiter „Belege“ gibt es nur für Verwalter-Handys, mit Freigabe und mit Liste vom Laptop
   const mitTelefonbuch = !sicht && telefonbuchAktiv() && !!(kopf && kopf.telefonbuch);                // A059: den Reiter „Telefonbuch“ gibt es nur für Verwalter-Handys, mit Freigabe und mit Liste vom Laptop
   const mitArtikel = !sicht && artikelAktiv() && !!(kopf && kopf.artikel);                       // A063: den Reiter „Artikel“ gibt es nur für Verwalter-Handys, mit Freigabe und mit Liste vom Laptop
+  const mitWissen = !sicht && wissenAktiv() && !!(kopf && kopf.wissen);                          // N13: den Reiter „Wissen“ gibt es nur für Verwalter-Handys, mit Freigabe und mit den Seiten vom Laptop
+  if (mitWissen && ueWunschWissen) { ueReiter = 'wissen'; ueWunschWissen = false; ueReiterZeigen = true; }              // aus „Mehr“ gewählt, bevor die Seiten da waren
   const mitHof = funktionAktiv('hof') && !!(kopf && kopf.hof && kopf.hof.karte === 'ok');       // den Reiter „Hof“ gibt es nur mit Freigabe und nur, wenn der Laptop eine Hof-Karte geschickt hat
   const nur = sicht ? sicht.reiter.filter(name => name !== 'hof' || mitHof) : null;
   if (nur && !nur.includes(ueReiter)) { ueReiter = nur[0] || ''; ueHofWahl = ''; }
@@ -1468,8 +1473,10 @@ function uebersichtZeichnen() {
   if (ueReiter === 'belege' && !mitBelege) ueReiter = 'lager';
   if (ueReiter === 'artikel' && !mitArtikel) ueReiter = 'lager';
   if (ueReiter === 'telefonbuch' && !mitTelefonbuch) ueReiter = 'lager';
-  zeichneReiter(leiste, ueReiter, name => { if (!ANZEIGE) { ueReiter = name; ueHofWahl = ''; uebersichtZeichnen(); uebersichtAuto('reiter'); } }, mitHof, nur, mitBelege, mitArtikel, mitTelefonbuch);
+  if (ueReiter === 'wissen' && !mitWissen) ueReiter = 'lager';
+  zeichneReiter(leiste, ueReiter, name => { if (!ANZEIGE) { ueReiter = name; ueHofWahl = ''; ueWunschWissen = false; uebersichtZeichnen(); uebersichtAuto('reiter'); } }, mitHof, nur, mitBelege, mitArtikel, mitTelefonbuch, mitWissen);
   leiste.scrollLeft = links;
+  if (ueReiterZeigen && !ueWunschWissen) { ueReiterZeigen = false; const an = leiste.querySelector('.ue-reiter.an'); if (an && an.scrollIntoView) an.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
   const ohneReiter = !!nur && !nur.length;
   leiste.hidden = ohneReiter;
   $('#ue-such').hidden = ohneReiter;
@@ -1514,6 +1521,12 @@ async function uebersichtAktualisieren() {
     ueStatus = testBlockiert(ziel, code) ? TEXTE.testNichtBereit : code === 'netz' ? 'Kein Netz – das ist der letzte Stand.'
       : code === 'bremse' ? 'Bitte kurz warten und noch einmal tippen.' : 'Das Fragen ging nicht.';
   } finally { ueFragt = false; uebersichtZeichnen(); }
+}
+// ---------- Wissen (Funktion „wissen“, N13) ----------
+// Der Reiter „Wissen“ der Übersicht: die Wiki-Seiten zum Nachlesen (Anleitungen oben), mit Suche; „Mehr“ → „Wissen“ führt direkt dorthin. Die Seiten reisen mit dem
+// Stand vom Laptop und bleiben im Handy (auch ohne Netz lesbar); hier wird nichts geschickt und nichts geändert.
+function wissenAktiv() {
+  return !ANZEIGE && !!geraet && geraet.status === 'frei' && geraet.rolle === 'admin' && funktionAktiv('wissen') && funktionAktiv('uebersicht');
 }
 // ---------- Telefonbuch (Funktion „telefonbuch“, A059) ----------
 // Der Reiter „Telefonbuch“ der Übersicht: Stellen und Leute zum Suchen, Telefon und Mail zum Antippen. Die Liste reist mit dem Stand vom Laptop; hier wird nichts geschickt und nichts geändert.
@@ -1773,6 +1786,7 @@ function mehrZeichnen() {
   const verwalter = geraet?.rolle === 'admin';
   $('#mehr-hof').hidden = !(verwalter && funktionAktiv('hof') && funktionAktiv('uebersicht'));
   $('#mehr-scanner').hidden = !scannerAktiv();
+  $('#mehr-wissen').hidden = !(verwalter && wissenAktiv());
   $('#mehr-aenderungen').hidden = !(verwalter && funktionAktiv('aenderungen') && funktionAktiv('rueckfragen'));
   $('#mehr-freigaben').hidden = !verwalter;
 }
@@ -1797,6 +1811,14 @@ $('#mehr-hof').addEventListener('click', () => {
   if (ueReiter !== 'hof') meldung('Die Hof-Karte ist noch nicht da – in der Übersicht oben auf „Aktualisieren“ tippen.', 6000);
 });
 $('#mehr-scanner').addEventListener('click', scannenOeffnen);
+$('#mehr-wissen').addEventListener('click', () => {
+  wissenSchliessen();
+  const da = !!(uebersichtFuer(postStand, modus) || {}).wissen;
+  ueReiter = da ? 'wissen' : ueReiter; ueHofWahl = ''; ueWunschWissen = !da; ueReiterZeigen = true;
+  if (ueSuche) { ueSuche = ''; $('#ue-such').value = ''; }
+  geheZu('s-uebersicht');
+  if (!da) meldung('Das Wissen wird vom Laptop geholt …');
+});
 $('#mehr-aenderungen').addEventListener('click', () => geheZu('s-post'));
 $('#mehr-freigaben').addEventListener('click', () => geheZu('s-freigaben'));
 $('#mehr-hilfe').addEventListener('click', () => geheZu('s-hilfe'));
