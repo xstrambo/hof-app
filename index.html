@@ -273,6 +273,20 @@
   </div>
 </section>
 
+<!-- Anleitungen auf dem Handy eines Mitarbeiters (Funktion „anleitungen“, N15): Suche, Liste, Seite groß lesen – auch ohne Netz der letzte Stand -->
+<section class="screen" id="s-anleitungen" data-funktion="anleitungen" hidden>
+  <div class="zurueck-kopf">
+    <button type="button" class="knopf-icon" id="b-zurueck-anleitungen" aria-label="Zurück"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <h1>Anleitungen</h1>
+    <button type="button" class="ue-akt" id="b-an-neu"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg><span>Aktualisieren</span></button>
+  </div>
+  <div class="ue-inhalt">
+    <p class="ue-stand leise klein" id="an-stand" role="status" aria-live="polite"></p>
+    <input type="search" class="ue-such" id="an-such" placeholder="Anleitung suchen" aria-label="In den Anleitungen suchen" autocomplete="off">
+    <div id="an-seite"></div>
+  </div>
+</section>
+
 <!-- Bestellkarte: eine Vorbestellung aus der Übersicht (A040) -->
 <section class="screen" id="s-bestellung" data-funktion="uebersicht" hidden>
   <div class="zurueck-kopf">
@@ -349,8 +363,8 @@
     <p><b>Foto, Scannen, Tippen:</b> den grünen Knopf länger gedrückt halten – dann kannst du ein Foto machen, scannen oder einen Text tippen.</p>
     <p><b>Übersicht:</b> Lager, Hof und mehr, so wie der Laptop sie zuletzt gemeldet hat.</p>
     <p><b>Post:</b> Fragen und Sachen für dich. Die rote Zahl sagt, wie viele auf dich warten.</p>
-    <p><b>Mehr:</b> alles Seltenere – Wissen, Hof-Karte, Scannen, Änderungen, Freigaben und diese Hilfe.</p>
-    <p><b>Wissen:</b> unter „Mehr“ – die Anleitungen und Wiki-Seiten zum Nachlesen, mit Suche. Sie kommen mit der Übersicht vom Laptop und sind auch ohne Netz da.</p>
+    <p><b>Mehr:</b> alles Seltenere – Anleitungen, Hof-Karte, Scannen, Änderungen, Freigaben und diese Hilfe.</p>
+    <p><b>Anleitungen:</b> wie Dinge im Betrieb gehen – zum Nachlesen, mit Suche. Sie kommen vom Laptop und sind auch ohne Netz da. Auf dem Handy eines Mitarbeiters unten in der Leiste.</p>
     <p><b>Zurück:</b> die Zurück-Taste des Handys geht einen Schritt zurück oder schließt das Menü.</p>
   </div>
 </section>
@@ -369,6 +383,10 @@
     </button>
     <span class="nav-mitte-text">Sprechen</span>
   </div>
+  <!-- N15: auf dem Handy eines Mitarbeiters (Mitglied) steht an der Stelle der Übersicht „Anleitungen“ -->
+  <button type="button" class="nav-punkt" id="nav-anleitungen" data-funktion="anleitungen" aria-label="Anleitungen" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 0-2 2z"/><path d="M20 5a2 2 0 0 0-2-2h-5v17h5a2 2 0 0 1 2 2z"/></svg><span>Anleitungen</span>
+  </button>
   <button type="button" class="nav-punkt" id="nav-post" data-funktion="rueckfragen" aria-label="Post" hidden>
     <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg><span>Post</span>
     <span class="nav-abzeichen" id="nav-abzeichen" hidden>0</span>
@@ -385,7 +403,8 @@
     <span class="griff" aria-hidden="true"></span>
     <b id="mehr-titel" class="blatt-titel">Mehr</b>
     <div class="mehr-liste">
-      <button type="button" class="mehr-punkt" id="mehr-wissen" data-funktion="wissen" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 0-2 2z"/><path d="M20 5a2 2 0 0 0-2-2h-5v17h5a2 2 0 0 1 2 2z"/></svg>Wissen</button>
+      <button type="button" class="mehr-punkt" id="mehr-wissen" data-funktion="wissen" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 0-2 2z"/><path d="M20 5a2 2 0 0 0-2-2h-5v17h5a2 2 0 0 1 2 2z"/></svg>Anleitungen</button>
+      <button type="button" class="mehr-punkt" id="mehr-anleitungen" data-funktion="anleitungen" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 0-2 2z"/><path d="M20 5a2 2 0 0 0-2-2h-5v17h5a2 2 0 0 1 2 2z"/></svg>Anleitungen</button>
       <button type="button" class="mehr-punkt" id="mehr-hof" data-funktion="hof" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20V10l5-4 5 4v10"/><path d="M13 20v-7l4-3 4 3v7"/><path d="M3 20h18"/></svg>Hof-Karte</button>
       <button type="button" class="mehr-punkt" id="mehr-scanner" data-funktion="scanner" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10"/></svg>Scanner</button>
       <button type="button" class="mehr-punkt" id="mehr-aenderungen" data-funktion="aenderungen" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Änderungen</button>

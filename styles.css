@@ -526,6 +526,7 @@ body.mit-scan #s-start{--fest:352px}                              /* der Knopf �
 .nav-punkt[aria-current="true"]::before{content:"";position:absolute;top:0;width:36px;height:4px;border-radius:0 0 4px 4px;background:var(--gruen-licht)}
 #nav-start{grid-column:1}
 #nav-uebersicht{grid-column:2}
+#nav-anleitungen{grid-column:2}                                      /* N15: nur auf dem Handy eines Mitarbeiters – an der Stelle der Übersicht */
 .nav-mitte{grid-column:3;grid-row:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:2px}
 .nav-fab{width:60px;height:60px;margin-top:-18px;border-radius:50%;border:4px solid var(--flaeche);background:var(--gruen);color:var(--auf-gruen);display:flex;align-items:center;justify-content:center;box-shadow:0 6px 16px rgba(0,0,0,.4);touch-action:manipulation;-webkit-user-select:none;user-select:none}
 .nav-fab svg{width:28px;height:28px}

@@ -10,7 +10,8 @@ import { anmeldeBestaetigen, anmeldeHandyEinrichten } from './js/anmelden.js';
 import { baueMitteilung } from './js/mitteilung-ansicht.js';
 import { zeichneKarte, einblendungText, WAHL_TEXT, fuelleFensterKarte, fuelleFensterQuittung, HINWEIS_LESE, HINWEIS_SPAET, HINWEIS_WARTET } from './js/bestaetigung-ansicht.js';
 import { zeichneReiter, zeichneInhalt, standText } from './js/uebersicht.js';
-import { wissenSchliessen } from './js/wissen-ansicht.js';
+import { wissenSchliessen, zeichneWissen } from './js/wissen-ansicht.js';
+import { anleitungenFuer, anleitungenGrundFuer, anleitungenBitteBauen } from './js/post.js';
 import { ARTEN as TAFEL_ARTEN, tafelnBereinigen, eigeneLaden, eigeneSpeichern, eigeneLoeschen, altSatz, zeichneTafeln, zeichneEditor, SATZ_KAPUTT } from './js/tafeln.js';
 import { zeichneAbgeholt, abgeholtText } from './js/abgeholt-ansicht.js';
 import { zeichneBestellung } from './js/bestellung-ansicht.js';
@@ -110,6 +111,7 @@ function zeige(id, { verlauf = true } = {}) {
   if (id === 's-post') { postZeichnen(true); postHolen(); }
   if (id === 's-uebersicht') { uebersichtZeichnen(); uebersichtAuto(vorher === 's-bestellung' ? 'zurueck' : 'oeffnen'); }              // A040: die Übersicht holt beim Öffnen selbst (nicht beim Zurück von der Bestellkarte)
   if (id === 's-bestellung') bestellungZeichnen();
+  if (id === 's-anleitungen') { anleitungenZeichnen(); anleitungenAuto(); }               // N15: holt beim Öffnen selbst, wenn der Stand fehlt oder älter als 5 Minuten ist
   if (id === 's-bereich') bereichZeichnen();
   if (id === 's-scan' && !scan.oeffnen(entwurf.bereich)) id = 's-start';
   if (id === 's-pruefen') { bereichAnzeigen(); pruefenRechte(); }
@@ -1003,7 +1005,7 @@ const postEntwuerfe = new Map();
 const postAktiv = () => !!geraet && geraet.status === 'frei' && geraet.rolle === 'admin' && funktionAktiv('rueckfragen');
 // Eine Station (A055) holt auf demselben Weg nur den Stand der Übersicht (und fragt ihn an wie ein Verwalter-Handy): keine Rückfragen, kein „Für dich“, keine Quittungen, keine Karten.
 const stationAktiv = () => stationFrei() && funktionAktiv('rueckfragen');
-const holenAktiv = () => postAktiv() || stationAktiv();
+const holenAktiv = () => postAktiv() || stationAktiv() || anleitungenAktiv();      // N15: ein Mitglied holt auf demselben Weg nur seine Anleitungen
 const aenderungenAktiv = () => funktionAktiv('aenderungen');
 const dingeAktiv = () => funktionAktiv('fuer_dich');
 
@@ -1022,6 +1024,7 @@ async function postHolen() {
     const r = await postHolenLogik({
       kasten, geraet, config, privatKey, stand: postStand, speichern: postSpeichern, test: modus === TEST,
       arten: stationFrei() ? ['uebersicht', 'uebersicht_grund'] : null,                             // eine Station nimmt nur die Übersicht an
+      ...(mitgliedFrei() ? { arten: ['anleitungen', 'anleitungen_grund'] } : {}),                    // N15: ein Mitglied nimmt nur die Anleitungen an
       dateiSpeichern: (key, bytes) => einstellung.setze(dateiSchluessel(key), bytes),           // das PDF eines „Für dich“-Eintrags
       dateiLoeschen: key => einstellung.loesche(dateiSchluessel(key)),
     });
@@ -1033,6 +1036,7 @@ async function postHolen() {
     if (r.quittungen || r.bestaetigungen) zeichneListen();     // neue Quittungen und Karten stehen unter den gesendeten Nachrichten
     if (r.quittungen || r.bestaetigungen) { const auf = await fensterPruefen(); if (r.bestaetigungen) karteAnkuendigen(auf); }
     if (r.uebersicht) { if (!ueFragt) ueStatus = ''; if (aktuell === 's-uebersicht') uebersichtZeichnen(); }
+    if (r.anleitungen) { if (!anFragt) anStatus = ''; if (aktuell === 's-anleitungen') anleitungenZeichnen(); }
   } catch (err) {
     const code = err instanceof BriefkastenFehler ? err.code : '';
     if (code === 'aktion') { postFehler = 'nicht_bereit'; postNichtBereitBis = Date.now() + 10 * 60 * 1000; }      // der Briefkasten kennt das noch nicht
@@ -1528,6 +1532,59 @@ async function uebersichtAktualisieren() {
 function wissenAktiv() {
   return !ANZEIGE && !!geraet && geraet.status === 'frei' && geraet.rolle === 'admin' && funktionAktiv('wissen') && funktionAktiv('uebersicht');
 }
+// ---------- Anleitungen auf dem Handy eines Mitarbeiters (Funktion „anleitungen“, N15) ----------
+// Ein Mitglied hat keine Übersicht. Es hat den Bereich „Anleitungen“ (unten in der Leiste und unter „Mehr“): Suche, Liste, Seite groß lesen – dieselbe Darstellung
+// wie beim Verwalter (js/wissen-ansicht.js, nur DOM und Text). Die Anleitungen kommen auf Bitte vom Laptop (nur sie, nichts anderes) und bleiben im Handy:
+// ohne Netz ist der letzte Stand lesbar. „Aktualisieren“ fragt neu; beim Öffnen fragt die App von selbst, wenn nichts da ist oder der Stand älter als 5 Minuten ist.
+const mitgliedFrei = () => geraet?.rolle === 'mitglied' && geraet.status === 'frei';
+function anleitungenAktiv() {
+  return !ANZEIGE && mitgliedFrei() && funktionAktiv('anleitungen') && funktionAktiv('rueckfragen');
+}
+let anSuche = '';
+let anStatus = '';
+let anFragt = false;
+let anLetzteFrage = 0;
+const anAlter = () => { const u = postStand && postStand.anleitungen ? postStand.anleitungen[normModus(modus)] : null; return u && Number.isFinite(u.gesehen) ? Date.now() - u.gesehen : Infinity; };
+function anleitungenZeichnen() {
+  const kopf = anleitungenFuer(postStand, modus);
+  zeichneWissen($('#an-seite'), kopf ? kopf.anleitungen : null, anSuche);
+  const stand = kopf ? standText(kopf.stand) : '';
+  $('#an-stand').textContent = anFragt ? (kopf ? stand + ' · wird geholt …' : 'Anleitungen werden geholt …') : anStatus ? anStatus + (kopf ? ' ' + stand : '') : kopf ? stand : 'Noch keine Anleitungen.';
+  $('#b-an-neu').classList.toggle('dreht', anFragt);
+  $('#b-an-neu').disabled = anFragt;
+}
+function anleitungenAuto() {
+  if (anFragt || !anleitungenAktiv() || Date.now() - anLetzteFrage < UE_ABSTAND_MS || anAlter() < UE_ALT_MS) return;
+  anleitungenAktualisieren();
+}
+async function anleitungenAktualisieren() {
+  if (anFragt || !geraet || !anleitungenAktiv()) return;
+  const ziel = modus;
+  if (!navigator.onLine) { anStatus = 'Kein Netz – das ist der letzte Stand.'; anleitungenZeichnen(); return; }
+  const privatKey = await privaterSchluessel();
+  if (!privatKey || !schluesselFuer(config, ziel)) { anStatus = 'Dieses Handy kann gerade nicht fragen. Bitte Niklas Bescheid geben.'; anleitungenZeichnen(); return; }
+  anFragt = true; anStatus = ''; anLetzteFrage = Date.now(); anleitungenZeichnen();
+  try {
+    const r = await anleitungenBitteBauen({ instanz: ziel, geraet, config, privatKey });
+    await kasten.senden(geraet.token, r.id, new Blob([r.umschlag], { type: 'application/octet-stream' }), ziel);
+    const ende = Date.now() + UE_WARTEN_MS;
+    while (Date.now() < ende) {
+      await new Promise(ok => setTimeout(ok, 1200));
+      await postHolen();
+      const k = anleitungenFuer(postStand, ziel);
+      if (k && k.frage === r.id) { anStatus = ''; return; }
+      const g = anleitungenGrundFuer(postStand, ziel);
+      if (g && g.frage === r.id) { anStatus = (BAU_CODES.includes(g.code) ? 'Der Laptop konnte die Anleitungen gerade nicht zusammenstellen: ' : '') + g.grund; return; }
+    }
+    anStatus = 'Der Laptop antwortet nicht – ist er an?';
+  } catch (err) {
+    const code = err instanceof BriefkastenFehler ? err.code : '';
+    anStatus = code === 'netz' ? 'Kein Netz – das ist der letzte Stand.' : code === 'bremse' ? 'Bitte kurz warten und noch einmal tippen.' : 'Das Fragen ging nicht.';
+  } finally { anFragt = false; anleitungenZeichnen(); }
+}
+$('#b-an-neu').addEventListener('click', () => anleitungenAktualisieren());
+$('#an-such').addEventListener('input', e => { anSuche = e.target.value; anleitungenZeichnen(); });
+$('#b-zurueck-anleitungen').addEventListener('click', () => history.back());
 // ---------- Telefonbuch (Funktion „telefonbuch“, A059) ----------
 // Der Reiter „Telefonbuch“ der Übersicht: Stellen und Leute zum Suchen, Telefon und Mail zum Antippen. Die Liste reist mit dem Stand vom Laptop; hier wird nichts geschickt und nichts geändert.
 function telefonbuchAktiv() {
@@ -1736,7 +1793,8 @@ $('#b-scannen').addEventListener('click', () => zeige('s-scan'));
 // nicht braucht, z. B. Post auf einem Mitglieds-Handy), fehlt. Alles Seltene steht im Menü „Mehr“. Die Zurück-Taste des Handys schließt ein offenes Blatt
 // bzw. geht zum vorigen Reiter (jedes Blatt und jeder Reiter ist ein Eintrag im Verlauf des Browsers).
 const NAV_BILDSCHIRME = ['s-start', 's-uebersicht', 's-bestellung', 's-post', 's-gesendet', 's-hilfe'];       // dort steht die Leiste; beim Sprechen, Prüfen, Scannen usw. nicht
-const NAV_ZIEL = { 's-start': 'nav-start', 's-gesendet': 'nav-start', 's-uebersicht': 'nav-uebersicht', 's-bestellung': 'nav-uebersicht', 's-post': 'nav-post', 's-hilfe': 'nav-mehr' };
+NAV_BILDSCHIRME.push('s-anleitungen');                                     // N15: die Anleitungen eines Mitarbeiters
+const NAV_ZIEL = { 's-start': 'nav-start', 's-gesendet': 'nav-start', 's-uebersicht': 'nav-uebersicht', 's-bestellung': 'nav-uebersicht', 's-post': 'nav-post', 's-hilfe': 'nav-mehr', 's-anleitungen': 'nav-anleitungen' };
 let offenesBlatt = null;              // 'mehr' | 'fab-blatt' | null
 let blattOffenSeit = 0;
 // Die Leiste ist die Oberfläche selbst, keine Vorschau: sie steht nur bei „alle“ (bei „test“ und ohne Eintrag sieht die App aus wie vorher – auch im Test-Modus der Testebene).
@@ -1752,6 +1810,7 @@ function navAnzeigen() {
   $('#nav-start').hidden = station;
   $('#nav-uebersicht').hidden = !verwalter && !station;                      // …und ohne Funktion „uebersicht“ blendet styles.css ihn aus
   $('#nav-post').hidden = !verwalter;                                        // …ebenso ohne „rueckfragen“
+  $('#nav-anleitungen').hidden = !anleitungenAktiv();                        // N15: nur auf dem Handy eines Mitarbeiters (…und ohne Funktion „anleitungen“ blendet styles.css ihn aus)
   $('#nav-mehr').hidden = station;
   $('.nav-mitte').hidden = station && !stationDarf('sprechen');
   const zahl = Number($('#post-zaehler').textContent) || 0;
@@ -1787,6 +1846,7 @@ function mehrZeichnen() {
   $('#mehr-hof').hidden = !(verwalter && funktionAktiv('hof') && funktionAktiv('uebersicht'));
   $('#mehr-scanner').hidden = !scannerAktiv();
   $('#mehr-wissen').hidden = !(verwalter && wissenAktiv());
+  $('#mehr-anleitungen').hidden = !anleitungenAktiv();                     // N15: dasselbe für das Handy eines Mitarbeiters
   $('#mehr-aenderungen').hidden = !(verwalter && funktionAktiv('aenderungen') && funktionAktiv('rueckfragen'));
   $('#mehr-freigaben').hidden = !verwalter;
 }
@@ -1801,6 +1861,7 @@ $('#b-uebersicht').addEventListener('click', () => zeige('s-uebersicht'));
 $('#nav-start').addEventListener('click', () => geheZu('s-start'));
 $('#nav-uebersicht').addEventListener('click', () => geheZu('s-uebersicht'));
 $('#nav-post').addEventListener('click', () => geheZu('s-post'));
+$('#nav-anleitungen').addEventListener('click', () => geheZu('s-anleitungen'));
 $('#nav-mehr').addEventListener('click', () => { if (offenesBlatt === 'mehr') blattZuMitZurueck(); else blattOeffnen('mehr'); });
 for (const id of ['#b-mehr-zu', '#b-mehr-abbrechen', '#b-fab-zu', '#b-fab-abbrechen']) {
   $(id).addEventListener('click', () => { if (Date.now() - blattOffenSeit > 400) blattZuMitZurueck(); });          // kurz nach dem Öffnen (Finger noch auf dem Knopf) zählt ein Tippen nicht
@@ -1817,8 +1878,9 @@ $('#mehr-wissen').addEventListener('click', () => {
   ueReiter = da ? 'wissen' : ueReiter; ueHofWahl = ''; ueWunschWissen = !da; ueReiterZeigen = true;
   if (ueSuche) { ueSuche = ''; $('#ue-such').value = ''; }
   geheZu('s-uebersicht');
-  if (!da) meldung('Das Wissen wird vom Laptop geholt …');
+  if (!da) meldung('Die Anleitungen werden vom Laptop geholt …');
 });
+$('#mehr-anleitungen').addEventListener('click', () => { wissenSchliessen(); geheZu('s-anleitungen'); });
 $('#mehr-aenderungen').addEventListener('click', () => geheZu('s-post'));
 $('#mehr-freigaben').addEventListener('click', () => geheZu('s-freigaben'));
 $('#mehr-hilfe').addEventListener('click', () => geheZu('s-hilfe'));
@@ -1901,6 +1963,7 @@ window.hofApp = {
   postausgang, quittungenHolen, nachrichten, zeichneListen, modus: () => modus, funktion: funktionAktiv, funktionenLaden, funktionen: () => ({ ...funktionen }),
   post: { holen: postHolen, stand: () => JSON.parse(JSON.stringify(postStand)), zeichnen: postZeichnen },
   karte: { sende: karteSenden, zustand: () => ({ ...kz }), aktiv: karteAktiv },
+  anleitungen: { aktualisieren: anleitungenAktualisieren, aktiv: anleitungenAktiv, fragt: () => anFragt, status: () => anStatus },
   uebersicht: { aktualisieren: uebersichtAktualisieren, fragt: () => ueFragt, status: () => ueStatus, bestellung: () => bestellWahl,
                   gesehenSetzen: ms => { const u = postStand.uebersicht && postStand.uebersicht[normModus(modus)]; if (u) u.gesehen = ms; } },        // (nur für Tests: den Stand „alt“ machen)
   bereich: () => entwurf.bereich,

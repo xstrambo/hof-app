@@ -1,13 +1,15 @@
 // Der Reiter „Wissen“ der Übersicht (Funktion „wissen“, N13): die Wiki-Seiten zum Nachlesen am Handy – zum Beispiel eine Anleitung im Schlepper.
+// Seit N15 heißt er „Anleitungen“ (im Wiki liegen dafür nur noch Anleitungen), und dieselbe Darstellung zeigt auf dem Handy eines Mitarbeiters den
+// Bereich „Anleitungen“ (Funktion „anleitungen“, app.js: anleitungenZeichnen).
 // Oben die Anleitungen, dann Themen, Betriebe, Konzepte; das Suchfeld der Übersicht sucht in Titel und Text (Groß/Klein egal, „Mähwerk“ findet auch „Maehwerk“).
 // Antippen öffnet die Seite groß. Die Daten kommen als geprüfte Liste vom Laptop (js/post.js, wissenListe); hier wird nur gezeichnet – ausschließlich mit
 // DOM-Elementen und textContent, nie mit HTML aus den Daten. Ein Verweis auf eine andere Wiki-Seite öffnet sie in der App; eine Internet-Adresse steht nur als Text da.
 // Ohne Netz bleibt der zuletzt geholte Stand lesbar (er liegt mit der Übersicht im Handy). Geändert wird hier nichts.
 import { wissenPfad } from './post.js';
 
-export const WISSEN_REITER = { name: 'Wissen', farbe: '#8a6fc9', icon: '<path d="M4 5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 0-2 2z"/><path d="M20 5a2 2 0 0 0-2-2h-5v17h5a2 2 0 0 1 2 2z"/><path d="M7 8h2M15 8h2M7 12h2M15 12h2"/>' };
-export const WISSEN_NOCH_NICHT = 'Noch kein Wissen vom Laptop. Tippe oben auf Aktualisieren.';
-export const WISSEN_NUR_TITEL = 'Diese Seite ist zu lang fürs Handy. Lies sie am Laptop: Zentrale, Seite „Wissen“.';
+export const WISSEN_REITER = { name: 'Anleitungen', farbe: '#8a6fc9', icon: '<path d="M4 5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 0-2 2z"/><path d="M20 5a2 2 0 0 0-2-2h-5v17h5a2 2 0 0 1 2 2z"/><path d="M7 8h2M15 8h2M7 12h2M15 12h2"/>' };
+export const WISSEN_NOCH_NICHT = 'Noch keine Anleitungen vom Laptop. Tippe oben auf Aktualisieren.';
+export const WISSEN_NUR_TITEL = 'Diese Seite ist zu lang fürs Handy. Lies sie am Laptop: Zentrale, Seite „Anleitungen“.';
 export const WISSEN_FUSS = 'Nur zum Nachlesen – geändert wird im Chat mit Claude.';
 const MAX_ZEILEN = 20000;
 

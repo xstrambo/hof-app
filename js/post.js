@@ -43,7 +43,7 @@ export const NACHRICHT_ANLAESSE = ['zusage', 'abholbereit', 'aenderung'];
 export const schluesselVon = (instanz, id) => `${normModus(instanz)}:${id}`;
 
 // ---- Zustand (liegt im Handy, IndexedDB „einstellungen“) --------------------------------------------------------------------
-export function neuerStand() { return { v: 1, fragen: {}, items: {}, dinge: {}, quittungen: {}, uebersicht: {}, uebersichtGrund: {}, bestaetigungen: {} }; }
+export function neuerStand() { return { v: 1, fragen: {}, items: {}, dinge: {}, quittungen: {}, uebersicht: {}, uebersichtGrund: {}, bestaetigungen: {}, anleitungen: {}, anleitungenGrund: {} }; }
 
 const text = (x, n) => (typeof x === 'string' ? x.replace(/\s+/g, ' ').trim().slice(0, n) : '');
 const textMitZeilen = (x, n) => (typeof x === 'string' ? x.replace(/\r/g, '').split('\n').map(z => z.replace(/[ \t]+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, n) : '');
@@ -593,6 +593,39 @@ export function uebersichtFuer(stand, instanz) {
   return u && u.kopf ? u.kopf : null;
 }
 
+// ---- Anleitungen für die Handys der Mitarbeiter (Funktion „anleitungen“, N15) ------------------------------------------------------------
+// Ein Mitglied bittet (Art „anleitungen_bitte“), der Laptop schickt NUR die Anleitungen (Art „anleitungen“, Form wie das Wissen) oder einen kurzen Satz
+// (Art „anleitungen_grund“). Hier wird streng geprüft: wie beim Wissen (wissenListe), dazu nur Seiten der Gruppe „Anleitungen“ mit „anleitung-“ im Namen.
+const ANLEITUNG_NAME = /(^|\/)anleitung-[^/]*$/i;
+export function anleitungenListe(b) {
+  const l = wissenListe(b);
+  if (!l) return null;
+  const seiten = l.seiten.filter(s => s.gruppe === 'anleitungen' && ANLEITUNG_NAME.test(s.pfad));
+  return { ...l, gruppen: seiten.length ? [['anleitungen', 'Anleitungen']] : [], seiten, nur_titel: seiten.filter(s => s.nur_titel).length };
+}
+export function anleitungenKopf(k) {
+  if (!istObjekt(k) || k.art !== 'anleitungen' || k.version !== 1) return null;
+  const id = typeof k.id === 'string' ? k.id : '';
+  const stand = zeitText(k.stand);
+  const liste = anleitungenListe(k.anleitungen);
+  if (!ID_OK.test(id) || !stand || !liste) return null;
+  return { id, frage: typeof k.frage === 'string' && UUID.test(k.frage) ? k.frage : '', stand, gesendet: zeitText(k.gesendet), anleitungen: liste };
+}
+export function anleitungenGrundKopf(k) {
+  if (!istObjekt(k) || k.art !== 'anleitungen_grund' || k.version !== 1) return null;
+  const g = uebersichtGrundKopf({ ...k, art: 'uebersicht_grund' });
+  return g;
+}
+// Die zuletzt bekommenen Anleitungen dieser Instanz (oder null): bleiben auf dem Handy, auch ohne Netz.
+export function anleitungenFuer(stand, instanz) {
+  const u = stand && istObjekt(stand.anleitungen) ? stand.anleitungen[normModus(instanz)] : null;
+  return u && u.kopf ? u.kopf : null;
+}
+export function anleitungenGrundFuer(stand, instanz) {
+  const g = stand && istObjekt(stand.anleitungenGrund) ? stand.anleitungenGrund[normModus(instanz)] : null;
+  return g && g.kopf ? g.kopf : null;
+}
+
 // Was eine Station (A055) zeigt und anbietet: das Profil aus dem letzten geprüften Stand dieser Instanz. Ohne Stand, ohne Profil im Stand oder wenn der Laptop danach
 // gemeldet hat, dass für dieses Gerät nichts eingestellt ist (Grund „kein_profil“), ist es leer – `satz` sagt dann, was stattdessen auf dem Bildschirm steht.
 export const STATION_NICHTS = 'Der Laptop hat für dieses Gerät noch nichts geschickt.';
@@ -730,6 +763,14 @@ export function normStand(roh) {
       if (kopf) aus.uebersichtGrund[k] = { instanz: k, kopf, gesehen: Number.isFinite(u.gesehen) ? u.gesehen : Date.now() };
     }
   }
+  for (const [feld, pruef] of [['anleitungen', anleitungenKopf], ['anleitungenGrund', anleitungenGrundKopf]]) {          // N15: Anleitungen eines Mitglieds
+    if (!istObjekt(roh[feld])) continue;
+    for (const [k, u] of Object.entries(roh[feld])) {
+      if ((k !== ECHT && k !== TEST) || !istObjekt(u)) continue;
+      const kopf = pruef({ ...u.kopf, art: feld === 'anleitungen' ? 'anleitungen' : 'anleitungen_grund', version: 1 });
+      if (kopf) aus[feld][k] = { instanz: k, kopf, gesehen: Number.isFinite(u.gesehen) ? u.gesehen : Date.now() };
+    }
+  }
   if (istObjekt(roh.quittungen)) {
     for (const [k, q] of Object.entries(roh.quittungen)) {
       const g = normQuittung(k, q);
@@ -788,6 +829,22 @@ export function anwenden(stand, instanz, rohKopf, jetzt = Date.now()) {
     if (!istObjekt(stand.uebersichtGrund)) stand.uebersichtGrund = {};
     stand.uebersichtGrund[instanz] = { instanz, kopf: g, gesehen: jetzt };
     return 'grund';
+  }
+  if (istObjekt(rohKopf) && rohKopf.art === 'anleitungen') {                                                    // N15: die Anleitungen eines Mitglieds
+    const u = anleitungenKopf(rohKopf);
+    if (!u) return 'ungueltig';
+    if (!istObjekt(stand.anleitungen)) stand.anleitungen = {};
+    const alt = stand.anleitungen[instanz];
+    if (alt && alt.kopf && u.stand < alt.kopf.stand) return 'alt';                                              // ältere Anleitungen nach neueren
+    stand.anleitungen[instanz] = { instanz, kopf: u, gesehen: jetzt };
+    return 'anleitungen';
+  }
+  if (istObjekt(rohKopf) && rohKopf.art === 'anleitungen_grund') {
+    const g = anleitungenGrundKopf(rohKopf);
+    if (!g) return 'ungueltig';
+    if (!istObjekt(stand.anleitungenGrund)) stand.anleitungenGrund = {};
+    stand.anleitungenGrund[instanz] = { instanz, kopf: g, gesehen: jetzt };
+    return 'anleitungen';
   }
   if (istObjekt(rohKopf) && rohKopf.art === 'fuer_dich' && rohKopf.ding === 'quittung') {
     const q = quittungKopf(rohKopf);
@@ -989,6 +1046,18 @@ export async function uebersichtFrageBauen({ instanz, geraet, config, privatKey,
   return { id: kopf.id, umschlag: await verschluesseln(await beglaubigen(klar, mac), laptop), instanz };
 }
 
+// ---- Anleitungen erbitten (Funktion „anleitungen“, N15: nur das Handy eines Mitglieds) ------------------------------------------------
+// Wie die Anfrage nach der Übersicht: winzig, beglaubigt, gleich in den Briefkasten. Der Laptop antwortet nur mit den Anleitungen (Art „anleitungen“).
+export async function anleitungenBitteBauen({ instanz, geraet, config, privatKey, jetzt = new Date() }) {
+  instanz = normModus(instanz);
+  const laptop = schluesselFuer(config, instanz);
+  if (!laptop) throw new Error('kein Schlüssel');
+  const kopf = { art: 'anleitungen_bitte', id: crypto.randomUUID(), ziel: instanz, von: geraet.name, geraet: geraet.id, erstellt: jetzt.toISOString() };
+  const mac = await macSchluessel(privatKey, laptop, H2L);
+  const klar = await packen(kopf, []);
+  return { id: kopf.id, umschlag: await verschluesseln(await beglaubigen(klar, mac), laptop), instanz };
+}
+
 // ---- Das Original eines Belegs holen (Funktion „belege“, A053) ------------------------------------------------------------------
 // Eine kleine beglaubigte Anfrage (Art „beleg_original_frage“: nur die Kennung des Belegs). Der Laptop prüft und legt das Original als Karte „Für dich“ in die Post
 // dieses Handys (der vorhandene Weg); als Antwort kommt ein kurzer Satz (Art „uebersicht_grund“, Kennung der Anfrage). Sie geht gleich in den Briefkasten, nicht durch die Warteschlange.
@@ -1088,7 +1157,7 @@ export async function anmeldeHandyBauen({ kennung, schluessel, instanz, geraet, 
 // nie Rückfragen, „Für dich“, Quittungen oder Karten.
 // Gibt { neu, geaendert, erledigt, dinge, quittungen, bestaetigungen, verworfen, uebersprungen, schluesselFehlt } zurück. Wirft BriefkastenFehler, wenn der Briefkasten nicht antwortet.
 export async function holen({ kasten, geraet, config, privatKey, stand, speichern, test = false, jetzt = () => Date.now(), dateiSpeichern = async () => {}, dateiLoeschen = async () => {}, arten = null }) {
-  const erg = { neu: 0, geaendert: 0, erledigt: 0, dinge: 0, quittungen: 0, bestaetigungen: 0, uebersicht: 0, verworfen: 0, uebersprungen: 0, schluesselFehlt: false };
+  const erg = { neu: 0, geaendert: 0, erledigt: 0, dinge: 0, quittungen: 0, bestaetigungen: 0, uebersicht: 0, anleitungen: 0, verworfen: 0, uebersprungen: 0, schluesselFehlt: false };
   const r = await kasten.antwortenListe(geraet.token, test);
   if (!istObjekt(r)) return erg;
   if (r.hat_schluessel === false) { erg.schluesselFehlt = true; return erg; }
@@ -1115,7 +1184,7 @@ export async function holen({ kasten, geraet, config, privatKey, stand, speicher
       const klar = await beglaubigtOeffnen(await entschluesseln(umschlag, privatKey), mac);
       const { kopf, dateien } = auspacken(klar);
       if (kopf && kopf.ziel === instanz && (!Array.isArray(arten) || arten.includes(kopf.art))) {
-        if (kopf.art === 'uebersicht' || kopf.art === 'uebersicht_grund') {
+        if (kopf.art === 'uebersicht' || kopf.art === 'uebersicht_grund' || kopf.art === 'anleitungen' || kopf.art === 'anleitungen_grund') {
           ergebnis = dateien.length ? 'ungueltig' : anwenden(stand, instanz, { ...kopf, dateien: [] }, jetzt());          // der Stand (und der Grund) trägt nie eine Datei
         } else if (kopf.art === 'fuer_dich' && kopf.ding === 'bestaetigung') {
           ergebnis = dateien.length ? 'ungueltig' : anwenden(stand, instanz, { ...kopf, dateien: [] }, jetzt());       // eine Karte trägt nie eine Datei
@@ -1153,6 +1222,7 @@ export async function holen({ kasten, geraet, config, privatKey, stand, speicher
     else if (ergebnis === 'quittung') erg.quittungen++;
     else if (ergebnis === 'bestaetigung') erg.bestaetigungen++;
     else if (ergebnis === 'uebersicht' || ergebnis === 'grund') erg.uebersicht++;
+    else if (ergebnis === 'anleitungen') erg.anleitungen++;
     else if (ergebnis === 'ungueltig' || ergebnis === 'alt') erg.verworfen++;
     await speichern(stand);
     try { await kasten.antwortQuittieren(geraet.token, x.id, test); } catch { /* der Umschlag wird beim nächsten Mal noch einmal quittiert */ }
